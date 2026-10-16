@@ -29,9 +29,15 @@ bet-log history). See README.md for the model and its backtest.
 - The backtest treats tonight's starting goalie as known (announced before puck drop) — the starter = the team's goalie
   with the most TOI that night. The app defaults to ESPN's scoreboard `probables` (probableStartingGoalie).
 
-## Market-first (borrowed from the NFL result, NOT tested on NHL prices)
-- Shots / points: other books' de-vigged P(over) (`consAt`, nearest line within max(1,12%) moved by the model) + 10%
-  model, capped ±3 pts (`MODEL_CAP`), like the NBA app.
+## Market-first (TESTED on real NHL prices, 2026-10-16)
+- REAL-PRICE TEST: `market-backtest.mjs` (shared with the NBA repo; `DUMP_BT=1 SKIP_LIVE=1 node build-nhl-snapshot.mjs
+  2025 2026` first) priced 299 games × sog / anytime / points at start−20 min (~9K credits; Utah was UTA in 2025-26 and
+  UTAH now — `canon()`). Books beat the model on sog + points both halves -> model share 0 (`propW(s)`). Anytime goal:
+  model == market (Brier .1199/.1244) but the app's anytime rule (market EV>3% at best FD/DK) LOST 38% on 183 bets (CI
+  below 0) -> GOAL_BETS=false: anytime goal is shown, tier 'nobet', never on the card. Every over −4%, under −8%, every
+  anytime −8% (+100..+400 −2.6%). Two-way app-rule bets were rare (21) — the books barely disagree on NHL props.
+- Shots / points: other books' de-vigged P(over) (`consAt`, nearest line within max(1,12%) moved by the model), model
+  share from market_anchor.json (0), capped ±3 pts (`MODEL_CAP`).
 - Anytime goal (`player_goal_scorer_anytime`, yes-only): `yesScale()` = Σ model P(goal) / Σ other books' implied over the
   game's players (≥6) → fair = implied × that (market says who, model says how many — the NFL 1st/last-TD rule);
   GOAL_W = 0 (the NFL TD test). `player_goals` O/U 0.5 (two-way, off by default) is de-vigged like shots when posted.

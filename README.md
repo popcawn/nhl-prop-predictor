@@ -49,15 +49,27 @@ allowed, the longer rate memory, light shrinkage, last season at 70%, the points
 (it fitted zero once the opponent and goalie were in). The goalie's save % made no measurable difference over the
 opponent's goals per shot; it stays because it's the thing you can set.
 
-**What this does not show.** A book's line is far sharper than a season average, and **this has not been tested against
-real NHL prices**. The NFL version was, and the books beat the model. So the app is market-first:
-- shots and points: chance = the *other* books' price with their cut removed, nudged toward the simulator with a 10%
-  weight and **never by more than 3 points**;
-- anytime goal (a yes-only price that keeps the book's cut): the other books' prices scaled so the game's scorers add up
-  to the simulator's expected count — the market says *who*, the model says *how many* — with no model nudge;
-- under a 6% chance is a 🎲 long shot and never bet; an EV over 100% is ⚠ check (usually news or a stale price).
+### Real prices (2025-26, tested Oct 2026)
+`market-backtest.mjs` priced 299 games of 2025-26 with every US book's real lines ~20 minutes before puck drop (The Odds
+API history, ~9,000 credits) and scored the same leak-free projections against them (Brier, half 1 / half 2):
+
+| Bet | Lines | The other books | Simulator |
+|---|---|---|---|
+| Shots on goal | 4,367 | **.2430 / .2460** | .2443 / .2492 |
+| Points | 4,809 | **.2406 / .2349** | .2427 / .2377 |
+| Anytime goal | 10,353 | .1199 / .1244 | .1199 / .1244 |
+
+The books beat the simulator on shots and points in both halves (closer than in the NBA); on anytime goal they were
+exactly as good as each other. At the better of FanDuel / DraftKings: every over lost ~4%, every under ~8%, every anytime
+goal ~8% (−2.6% inside +100 to +400). The decisive one: **betting the anytime-goal prices that looked best (your book
+longer than the others) lost 38% on 183 bets** — a book that is out of line on a scorer usually knows something
+(line changes, power-play units). So:
+- shots and points: chance = the other books' price with their cut removed — the simulator gets no say;
+- **anytime goal is priced and shown, never put on the card** ("not bet (tested)");
+- under a 6% chance is a 🎲 long shot and never bet; an EV over 100% is ⚠ check.
 
 An **edge** means "your book is out of line with the others"; **CLV** in the bet log is how you find out whether it works.
+
 *Not betting advice.*
 
 ## Files

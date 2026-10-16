@@ -148,7 +148,7 @@ function score(M, P, rows) {
     const H = { 1: { b: 0, bn: 0, n: 0, ae: 0, aen: 0 }, 2: { b: 0, bn: 0, n: 0, ae: 0, aen: 0 } }, cal = Array.from({ length: 10 }, () => ({ n: 0, p: 0, y: 0 }));
     for (const z of pop) { const h = H[z.x.half], p = squeeze(z.p0, slope[z.x.half]); h.b += (p - z.o) ** 2; h.bn += (z.pn - z.o) ** 2; h.n++; h.ae += Math.abs(z.mu - z.y); h.aen += Math.abs(z.x.F.avg[s === 'goal' ? 'g' : s] - z.y);
       const c = cal[Math.min(9, Math.floor(p * 10))]; c.n++; c.p += p; c.y += z.o; }
-    out[s] = { n: pop.length, b1: H[1].b / H[1].n, b2: H[2].b / H[2].n, nb1: H[1].bn / H[1].n, nb2: H[2].bn / H[2].n, mae1: H[1].ae / H[1].n, mae2: H[2].ae / H[2].n, nmae1: H[1].aen / H[1].n,
+    out[s] = { n: pop.length, slopeH: { 1: slope[1], 2: slope[2] }, b1: H[1].b / H[1].n, b2: H[2].b / H[2].n, nb1: H[1].bn / H[1].n, nb2: H[2].bn / H[2].n, mae1: H[1].ae / H[1].n, mae2: H[2].ae / H[2].n, nmae1: H[1].aen / H[1].n,
       slope: slope.all, cal: cal.filter(c => c.n >= 150).map(c => ({ pred: +(c.p / c.n).toFixed(3), actual: +(c.y / c.n).toFixed(3), n: c.n })) };
   }
   return out;
@@ -186,6 +186,16 @@ if (process.env.BT_EXPERIMENTS) {
 }
 export const BACKTEST = { train: TRAIN, test: TEST, stats: Object.fromEntries(STATS.map(s => [s, { n: Rs[s].n, brier: [+f4(Rs[s].b1), +f4(Rs[s].b2)], naive: [+f4(Rs[s].nb1), +f4(Rs[s].nb2)],
   mae: +f2(Rs[s].mae1), naiveMae: +f2(Rs[s].nmae1), cal: Rs[s].cal, beatsNaive: Rs[s].b1 < Rs[s].nb1 && Rs[s].b2 < Rs[s].nb2 }])) };
+// DUMP_BT=1: every test-season row's leak-free projection (and the dispersion / slopes it is scored with) ->
+// bt_rows_<season>.json (gitignored) for market-backtest.mjs, which prices the same rows against real sportsbook lines
+if (process.env.DUMP_BT) {
+  const games = GL[TEST].games.map(g => ({ id: g.id, d: g.d, h: g.h, a: g.a }));
+  const rows = testRows.map(x => { const mu = project(x.F, x.D, x.sv, x.ou, PH(P, x)); return { g: GL[TEST].games[x.gi].id, pid: x.pid, half: x.half,
+    mu: { sog: +mu.sog.toFixed(3), goal: +mu.goal.toFixed(4), pts: +mu.pts.toFixed(4) }, act: x.act, avg: { sog: +x.F.avg.sog.toFixed(2) } }; });
+  const out = { season: TEST, builtAt: new Date().toISOString(), games, names, rows, r: P.r, slopeH: Object.fromEntries(STATS.map(st => [st, Rs[st].slopeH])), calib: MODEL.calib };
+  fs.writeFileSync(path.join(__dirname, `bt_rows_${TEST}.json`), JSON.stringify(out));
+  log(`  DUMP_BT: wrote bt_rows_${TEST}.json (${rows.length} player-games)`);
+}
 if (process.env.SKIP_LIVE) process.exit(0);
 
 // ------------------------------------------------------------------ live snapshot: teams, rosters, each player's inputs

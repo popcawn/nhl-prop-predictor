@@ -138,8 +138,8 @@
         <details class="muted" style="margin-top:8px;font-size:12px"><summary style="cursor:pointer">ⓘ How to read this</summary>
           <div style="margin-top:6px;line-height:1.6">
             <b>Proj</b> is the simulator's number: his expected ice time × his per-minute rate (recent games count more; last season counts 40%), adjusted for how many shots the opponent allows, how good tonight's goalie is, and the game total. Pick each team's <b>goalie</b> (ESPN's probable starter is the default) and set a skater to OUT if he's scratched.
-            <b>Chance</b> is what a bet is judged on: the <i>other</i> books' price for that line with their cut removed. For shots and points it is nudged toward the simulator (10%, never more than 3 points); for <b>anytime goal</b> it is the market alone, as with NFL touchdowns. <b>EV</b> compares that chance with the best price at your books.
-            <b>Not tested against real NHL prices yet.</b> Treat an edge as "your book is out of line with the others" and let the bet log's CLV tell you whether it works.
+            <b>Chance</b> is what a bet is judged on: the <i>other</i> books' price for that line with their cut removed. <b>EV</b> compares that chance with the best price at your books.
+            <b>Tested on last season's real prices:</b> the books beat the simulator on shots and points, so the chance is the market's. <b>Anytime goal is shown but never recommended</b> — betting the anytime prices that looked best lost 38% (a book out of line on a scorer usually knows something). Treat an edge as "your book is out of line with the others" and let the bet log's CLV tell you whether it works.
           </div>
         </details>
       </div>
@@ -388,8 +388,13 @@ async function pullAll(only){
 }
 
 // ---------------------------------------------------------------- candidates: every priced side, judged against the market
-const PROP_W=S.marketAnchor&&S.marketAnchor.props&&S.marketAnchor.props.w!=null?S.marketAnchor.props.w:0.1;   // shots / points: the model's share (NFL-tested value; not NHL-tested)
-const GOAL_W=0;   // anytime goal: the market alone — the NFL test found the books beat the model on anytime TDs
+// the model's share, fitted on 2025-26 REAL prices (market-backtest.mjs, 299 games, ~20 min before puck drop): the other
+// books' price beat the model on shots and points in both halves -> 0. Anytime goal: the model was exactly as good as the
+// market (Brier .1199/.1244 both) but betting the app's anytime-goal edges LOST 38% on 183 bets (CI below 0): a book that is
+// out of line on a goal scorer usually knows something -> anytime goal is priced and shown, never put on the card.
+const MA=S.marketAnchor||{}, PROP_W=MA.props&&MA.props.w!=null?MA.props.w:0.1;
+const propW=s=>MA.props&&MA.props.byStat&&MA.props.byStat[s]!=null?MA.props.byStat[s]:PROP_W;
+const GOAL_W=0, GOAL_BETS=false;
 const MODEL_CAP=0.03;
 const blendP=(mkt,model,w)=>w?clamp(expit((1-w)*logit(clamp(mkt,0.003,0.995))+w*logit(clamp(model,0.003,0.995))), mkt-MODEL_CAP, mkt+MODEL_CAP):mkt;
 function consAt(board, key, s, line, mu){ const o=board.cons[key]; if(!o) return null; if(o[line]!=null) return o[line];
@@ -416,8 +421,9 @@ function buildCands(){
         if(mo==null&&s==='goal'&&off.line===0.5&&board.yes[k]>0&&ks){ mo=clamp(board.yes[k]*ks,0.005,0.95); src='books'; }
         if(mo==null&&off.O&&off.U){ const io=americanToProb(parseFloat(off.O.o)), iu=americanToProb(parseFloat(off.U.o)); if(io>0&&iu>0){ mo=io/(io+iu); src='own'; } }
         for(const sd of ['O','U']){ const o=off[sd]; if(!o) continue; const dec=oddsDec(o.o); if(!dec) continue; const model=sd==='O'?ps.over:ps.under, mkt=mo!=null?(sd==='O'?mo:1-mo):null;
-          const mp=mkt!=null?blendP(mkt,model,s==='goal'?GOAL_W:PROP_W):model, bimp=1/dec, ev=mp*dec-1, edge=mp-bimp, conf=confOf(r,src);
-          const tier=mkt==null?'model':mp<0.06?'dart':(edge>0.12||ev>1)?'flag':(ev>=0.03&&edge>=0.015)?'take':'pass';   // the NFL app's guards: under 6% is too rare to price; a huge gap is usually news or a stale price
+          const mp=mkt!=null?blendP(mkt,model,s==='goal'?GOAL_W:propW(s)):model, bimp=1/dec, ev=mp*dec-1, edge=mp-bimp, conf=confOf(r,src);
+          let tier=mkt==null?'model':mp<0.06?'dart':(edge>0.12||ev>1)?'flag':(ev>=0.03&&edge>=0.015)?'take':'pass';
+          if(s==='goal'&&!GOAL_BETS&&tier==='take') tier='nobet';   // the NFL app's guards: under 6% is too rare to price; a huge gap is usually news or a stale price
           out.push({game:g.game, evId:g.id, tip:g.tip, key, name:r.p.name, abbr:r.abbr, pos:r.p.pos, stat:s, side:sd, line:off.line, market:mktKey(s,sd,off.line), odds:o.o, book:o.tk.b, tk:o.tk,
             mu, model, mkt, src, mp, bimp, ev, edge, conf, kelly:edge>0?conf.score*edge/(1-bimp):0, tier}); } } } }
   // the same side at two of your books (different lines) is one bet: keep the logged one, else the higher EV
@@ -475,7 +481,7 @@ function renderGame(){
   body.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(440px,100%),1fr));gap:16px">${col(g.away)}${col(g.home)}</div>`+
     (board?'':`<div class="muted" style="margin-top:8px;font-size:12px">No prices for this game yet — hit ⚡ on its chip (or Pull tonight).</div>`);
 }
-const verdictOf=c=>{ const pick=CARD.find(p=>p.game===c.game&&p.key===c.key&&p.market===c.market); return pick?`<span class="vb vb-take">★ BET ${stakeTxt(pick.stake)}</span>`:c.tier==='take'?'<span class="vb vb-edge" title="an edge, but not one of tonight\'s best (one per player, 2 per team, 3 per game)">edge</span>':c.tier==='flag'?'<span class="vb vb-flag" title="an edge this big usually means news the price hasn\'t caught up with — check the lineup and the goalie">⚠ check</span>':c.tier==='model'?'<span class="muted">model only</span>':c.tier==='dart'?'<span class="muted" title="under a 6% chance — too rare to price reliably, never bet">🎲 long shot</span>':'<span class="muted">pass</span>'; };
+const verdictOf=c=>{ const pick=CARD.find(p=>p.game===c.game&&p.key===c.key&&p.market===c.market); return pick?`<span class="vb vb-take">★ BET ${stakeTxt(pick.stake)}</span>`:c.tier==='take'?'<span class="vb vb-edge" title="an edge, but not one of tonight\'s best (one per player, 2 per team, 3 per game)">edge</span>':c.tier==='flag'?'<span class="vb vb-flag" title="an edge this big usually means news the price hasn\'t caught up with — check the lineup and the goalie">⚠ check</span>':c.tier==='model'?'<span class="muted">model only</span>':c.tier==='dart'?'<span class="muted" title="under a 6% chance — too rare to price reliably, never bet">🎲 long shot</span>':c.tier==='nobet'?'<span class="muted" title="on last season\'s real prices, betting the anytime-goal prices that looked best lost 38% (183 bets): a book out of line on a scorer usually knows something">not bet (tested)</span>':'<span class="muted">pass</span>'; };
 let BOARDROWS=[];
 function renderBoard(){
   const all=CANDS.filter(c=>!c.dup), showAll=$('boardAll').checked, ord=c=>CARD.some(p=>p.game===c.game&&p.key===c.key&&p.market===c.market)?0:c.tier==='take'?1:c.tier==='flag'?2:3;
@@ -534,7 +540,7 @@ function renderBets(){
 function renderTest(){ const bt=M.backtest||{}; $('testNote').innerHTML=`<b>How the simulator was tested.</b> Every game of the ${M.test-1}-${String(M.test).slice(2)} season, using only what was known before puck drop (settings learned on ${M.train-1}-${String(M.train).slice(2)}; tonight's starting goalie treated as known, as it is announced before the game). Each bet was a book-like line — shots at his season average on the half shot, goals and points at 0.5 — scored separately on the two halves of the season:`+
   `<div class="scroll"><table style="margin-top:6px;max-width:620px"><thead><tr><th class="l">Bet</th><th>Player-games</th><th>Simulator</th><th>Season average</th></tr></thead><tbody>`+
   STATS.map(s=>{ const x=bt[s]; return x?`<tr><td class="l">${SHORT[s]}</td><td>${x.n.toLocaleString()}</td><td><b>${x.brier[0].toFixed(4)} / ${x.brier[1].toFixed(4)}</b></td><td class="muted">${x.naive[0].toFixed(4)} / ${x.naive[1].toFixed(4)}</td></tr>`:''; }).join('')+
-  `</tbody></table></div><div class="muted" style="font-size:12px;margin-top:4px">Lower is better. A book's line is far sharper than a season average, and <b>this has not been run against real NHL prices yet</b>. Until it is, the app trusts the other books: the simulator gets a ${Math.round(PROP_W*100)}% say on shots and points and none on anytime goal.</div>`; }
+  `</tbody></table></div><div class="muted" style="font-size:12px;margin-top:4px">Lower is better. <b>Against real prices</b> (299 games of 2025-26, every US book ~20 minutes before puck drop): the other books' price beat the simulator on shots and points in both halves; on anytime goal they were exactly as good as each other. Betting every over lost about 4%, every under about 8%, every anytime goal 8% (2.6% inside +100 to +400); the anytime prices that looked best lost 38%. So the app goes by the other books' price, gives the simulator no say, and never recommends an anytime-goal bet.</div>`; }
 function renderAll(){ buildCands(); buildCard(); renderSlate(); renderGame(); renderBoard(); renderCard(); renderBets(); oddsStatus(); }
 
 // ---------------------------------------------------------------- auto-settle (ESPN box scores) and closing prices

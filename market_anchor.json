@@ -1,0 +1,50 @@
+{
+ "builtAt": "2026-10-16T18:26:29.769Z",
+ "sport": "nhl",
+ "season": 2026,
+ "snap": "20 min before the start",
+ "stats": {
+  "pts": {
+   "w": 0,
+   "wBothSum": 0,
+   "wHalves": {
+    "h1": 0.1,
+    "h2": 0
+   },
+   "n": 4809
+  },
+  "sog": {
+   "w": 0,
+   "wBothSum": 0,
+   "wHalves": {
+    "h1": 0.2,
+    "h2": 0
+   },
+   "n": 4367
+  },
+  "goal": {
+   "w": 0.5,
+   "wHalves": {
+    "h1": 0.5,
+    "h2": 0.5
+   },
+   "n": 10353
+  }
+ },
+ "app": {
+  "props": {
+   "w": 0,
+   "fitted": true,
+   "season": 2026,
+   "n": 9176,
+   "byStat": {
+    "pts": 0,
+    "sog": 0
+   }
+  },
+  "goal": {
+   "w": 0.5,
+   "fitted": true
+  }
+ }
+}
