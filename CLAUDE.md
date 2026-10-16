@@ -52,6 +52,19 @@ bet-log history). See README.md for the model and its backtest.
 - Phone tab bar: sections carry `data-m` card | games | priced | bets in the HTML.
 - `autoSettle()`: ESPN summary by `b.ev`; keys `shotsTotal` / `goals` / `assists`; a skater not in the box = scratched → void.
 
+## One site, one pot (2026-10-16, user: "combine all into one sim … make them like the nfl sim … one pot")
+- The NFL, NBA and NHL apps are separate repos on ONE site (popcawn.github.io), so they share one browser storage. Each
+  page has a sport switcher (🏈 · 🏀 · 🏒, relative links ../<repo>/) and a 💰 pot chip.
+- ONE POT: `nfltd_bank` {amt, at, mt} is the bankroll for all three; bankNow() = amt + the dollar P/L of EVERY sport's bets
+  settled after `at` (`allBets()` reads nfltd_bets / nbap_bets / nhlp_bets). Typing a balance in any app writes nfltd_bank
+  (with mt). A `storage` listener redraws when another tab changes it. The NBA / NHL apps' own *_bank keys are only a
+  fallback for old data.
+- ☁ SYNC: the NFL app owns the token + secret gist (`nfltd_sync` {token, gistId}); the NBA / NHL apps reuse them and
+  write their OWN file in that gist (nba-sync.json / nhl-sync.json: bets + tombstones + the pot), merged like the NFL
+  app's (mt newest wins, tombstones). If no token: "☁ Sync: set up in 🏈 NFL".
+- NBA / NHL bet log = the NFL layout: weeks (Mon→Sun) with the money line (spent · won/lost · still riding · season so
+  far) -> nights (collapsed; tonight's marked 📍) -> bets.
+
 ## The user
 - Bets FanDuel + DraftKings (+ BetMGM), wants "what do I bet and how much, in dollars", gets overwhelmed — keep the card
   short. Be honest that an edge means "out of line with the other books". Commits end with the Co-Authored-By line from

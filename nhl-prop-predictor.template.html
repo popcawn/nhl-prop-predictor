@@ -25,6 +25,12 @@
   .bmain{min-width:0;container-type:inline-size}
   @media(min-width:1200px){ .book{grid-template-columns:minmax(0,1fr) 360px} .bslip{grid-column:2;grid-row:1;position:sticky;top:8px;max-height:calc(100vh - 16px);overflow-y:auto;scrollbar-width:thin} .bmain{grid-column:1;grid-row:1} }
   .bslip h2:first-child{margin-top:0}
+  /* sport switcher (one site, one pot: NFL · NBA · NHL) */
+  .sportbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 12px}
+  .sportbar a{padding:5px 13px;border-radius:999px;border:1px solid var(--line2);color:var(--ink2);text-decoration:none;font-weight:800;font-size:13px;background:var(--panel2)}
+  .sportbar a.on{background:var(--accent);color:#04121f;border-color:var(--accent)}
+  .sportbar .pot{margin-left:auto;font-size:13px;color:var(--ink2)} .sportbar .pot b{color:var(--ink)}
+
   table{width:100%;border-collapse:collapse}
   th{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink2);text-align:right;padding:8px 7px;border-bottom:1px solid var(--line2);white-space:nowrap}
   td{padding:7px 7px;text-align:right;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;white-space:nowrap}
@@ -55,6 +61,11 @@
   .tm{display:inline-block;width:4px;height:16px;border-radius:2px;vertical-align:-3px;margin-right:6px}
   .logsum{display:flex;gap:18px;flex-wrap:wrap;align-items:baseline;margin-bottom:10px;padding:9px 12px;background:var(--panel2);border:1px solid var(--line2);border-radius:10px;font-size:13px}
   details.daygrp{margin:0 0 6px} details.daygrp>summary{cursor:pointer;padding:8px 2px;font-size:14px;border-bottom:1px solid var(--line2)} details.daygrp[open]>summary{margin-bottom:8px}
+  details.weekgrp{margin:0 0 8px} details.weekgrp>summary{cursor:pointer;padding:8px 2px;font-size:14px;border-bottom:1px solid var(--line2)} details.weekgrp[open]>summary{margin-bottom:8px}
+  .wktally{display:block;font-size:12.5px;margin:4px 0 0 18px;line-height:1.5}
+  .wkbody details.daygrp{border:1px solid var(--line2);border-radius:10px;background:var(--panel2);margin:0 0 8px} .wkbody details.daygrp>summary{padding:8px 11px;border-bottom:none} .wkbody details.daygrp[open]>summary{border-bottom:1px solid var(--line2);margin-bottom:0}
+  .wkbody details.daygrp .scroll{padding:4px 8px 8px}
+  details.daygrp.curday{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent);background:rgba(77,163,255,.08)} details.daygrp.curday>summary::after{content:"📍 tonight";margin-left:8px;font-size:11px;font-weight:800;color:var(--accent)}
   .sub{margin-top:12px}
   .rowtake td{background:rgba(52,211,153,.06)}
   .stsel{font-size:11px;padding:1px 2px}
@@ -77,6 +88,7 @@
 </head>
 <body>
 <div class="wrap">
+  <nav class="sportbar" id="sportBar"><a href="../nfl-td-predictor/">🏈 NFL</a><a href="../nba-prop-predictor/">🏀 NBA</a><a href="../nhl-prop-predictor/" class="on">🏒 NHL</a><span class="pot" id="potChip"></span></nav>
   <header class="top">
     <h1>🏒 NHL Prop Simulator</h1>
     <span id="slateLbl" class="muted"></span>
@@ -157,6 +169,7 @@
       <div class="panel" data-m="bets">
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
           <span id="autoMsg" class="muted" style="font-size:12px"></span>
+          <span id="syncNote" class="muted" style="font-size:12px"></span>
           <span style="margin-left:auto;display:flex;gap:6px"><button class="ss" id="closeNow" title="fill Close on every open bet whose game hasn't started, from your books' current price (1 credit per market per game)">⚡ Closing prices</button><button class="ss" id="settleNow">🤖 Settle now</button></span>
         </div>
         <div id="betBody"></div>
@@ -266,21 +279,61 @@ function projFor(g){ const m=new Map(); for(const ab of [g.away,g.home]) for(con
 
 // ---------------------------------------------------------------- bankroll (dollars; grows with settled bets)
 let bets=lsJ('nhlp_bets', []);
-let BANK=Object.assign({amt:null, at:0}, lsJ('nhlp_bank', {}));
+// ---------- ONE POT (2026-10-16, user: "combine all into one sim … one pot"): the NFL, NBA and NHL apps share one bankroll —
+// nfltd_bank = {amt, at, mt} in this site's storage (the apps are one site, so one browser storage). Every sport's bets
+// settled after `at` move it; each app keeps its own bet list (nfltd_bets / nbap_bets / nhlp_bets).
+const ME='nhl', SPORT_BETS={nfl:'nfltd_bets', nba:'nbap_bets', nhl:'nhlp_bets'}, SPORT_LBL={nfl:'NFL', nba:'NBA', nhl:'NHL'};
+const otherBets=()=>Object.entries(SPORT_BETS).filter(([k])=>k!==ME).flatMap(([k,key])=>(lsJ(key,[])||[]).map(b=>Object.assign({},b,{sport:k})));
+const allBets=()=>bets.map(b=>Object.assign({},b,{sport:ME})).concat(otherBets());
+let BANK=Object.assign({amt:null, at:0, mt:0}, lsJ('nfltd_bank', null)||lsJ('nhlp_bank', {}));   // the pot (an older NHL-only bankroll is the fallback)
+const saveBank=()=>{ BANK.mt=Date.now(); lsW('nfltd_bank', BANK); try{ syncSoon(); }catch(e){} };
 const UNITS=100;   // 1 unit = 1% of the bankroll
 const betUsd=b=>b.usd!=null?+b.usd:(BANK.amt?(+b.stake||0)*BANK.amt/UNITS:null);
 const betPl=b=>{ const d=oddsDec(b.odds)||1, u=BANK.amt?betUsd(b):(+b.stake||0); return b.result==='win'?u*(d-1):b.result==='loss'?-u:b.result==='push'?0:null; };
-function bankNow(){ if(!BANK.amt) return null; let x=BANK.amt; for(const b of bets) if(b.st>BANK.at){ const p=betPl(b); if(p!=null) x+=p; } return Math.max(0,x); }
+function bankNow(){ if(!BANK.amt) return null; let x=BANK.amt; for(const b of allBets()) if(b.st>BANK.at){ const p=betPl(b); if(p!=null) x+=p; } return Math.max(0,x); }   // every sport's settled bets
 const unitUsd=()=>{ const n=bankNow(); return n!=null?n/UNITS:null; };
 const fmtUsd=x=>{ const a=Math.abs(x); return (x<0?'−':'')+'$'+(a>=20?Math.round(a).toLocaleString():a>=1?(Math.round(a*2)/2).toFixed(Math.round(a*2)%2?2:0):a.toFixed(2)); };
 const stakeTxt=u=>{ const k=unitUsd(); return k!=null?fmtUsd(u*k):(Math.round(u*10)/10).toFixed(1)+'u'; };
 const betStakeTxt=b=>BANK.amt&&betUsd(b)!=null?fmtUsd(betUsd(b)):b.stake+'u';
 function renderBank(){ const inp=$('bankUsd'), now=bankNow(); if(document.activeElement!==inp) inp.value=now!=null?Math.round(now*100)/100:'';
-  if(now==null){ $('bankNow').textContent=''; $('bankNote').textContent='Type what\'s in your betting account and every stake turns into dollars. It then grows or shrinks by itself as bets settle.'; return; }
-  const done=bets.filter(b=>b.st>BANK.at&&betPl(b)!=null), d=now-BANK.amt, open=bets.filter(b=>b.result==='pending'), risk=open.reduce((a,b)=>a+(betUsd(b)||0),0);
-  $('bankNow').innerHTML=done.length?`<b class="${d>0?'ev-pos':d<0?'ev-neg':''}">${d>=0?'+':''}${fmtUsd(d)}</b> <span class="muted">from ${done.length} settled bet${done.length>1?'s':''}</span>`:'';
-  $('bankNote').innerHTML=`1 unit = 1% = <b>${fmtUsd(unitUsd())}</b>.${open.length?` <b>${fmtUsd(risk)}</b> riding on ${open.length} open bet${open.length>1?'s':''}.`:''} Deposited or withdrew? Type the new balance.`; }
-function saveBets(){ lsW('nhlp_bets', bets); renderAll(); }
+  if(now==null){ $('bankNow').textContent=''; renderPotChip(null,0); $('bankNote').textContent='Type what\'s in your betting account and every stake turns into dollars — one pot for NFL, NBA and NHL. It then grows or shrinks by itself as bets settle.'; return; }
+  const AB=allBets(), done=AB.filter(b=>b.st>BANK.at&&betPl(b)!=null), d=now-BANK.amt, open=AB.filter(b=>b.result==='pending'), risk=open.reduce((a,b)=>a+(betUsd(b)||0),0);
+  const bySport=Object.keys(SPORT_LBL).map(k=>{ const L=done.filter(b=>b.sport===k); return L.length?`${SPORT_LBL[k]} ${(x=>(x>=0?'+':'')+fmtUsd(x))(L.reduce((a,b)=>a+betPl(b),0))}`:''; }).filter(Boolean).join(' · '); renderPotChip(now, open.length);
+  $('bankNow').innerHTML=done.length?`<b class="${d>0?'ev-pos':d<0?'ev-neg':''}">${d>=0?'+':''}${fmtUsd(d)}</b> <span class="muted">from ${done.length} settled bet${done.length>1?'s':''}${bySport?' — '+bySport:''}</span>`:'';
+  $('bankNote').innerHTML=`<b>One pot</b> for 🏈 🏀 🏒 — 1 unit = 1% = <b>${fmtUsd(unitUsd())}</b>.${open.length?` <b>${fmtUsd(risk)}</b> riding on ${open.length} open bet${open.length>1?'s':''}.`:''} Deposited or withdrew? Type the new balance.`; }
+function renderPotChip(now, nOpen){ const c=$('potChip'); if(c) c.innerHTML=now!=null?`💰 <b>${fmtUsd(now)}</b>${nOpen?` · ${nOpen} open`:''}`:'<span class="muted">💰 set your bankroll</span>'; }
+window.addEventListener('storage', e=>{ if(e.key==='nfltd_bank'){ BANK=Object.assign({amt:null, at:0, mt:0}, lsJ('nfltd_bank', {})); renderAll(); } else if(e.key&&e.key!=='nhlp_bets'&&Object.values(SPORT_BETS).includes(e.key)) renderBank(); });
+// ---------- ☁ SYNC — the NFL app's: same token and secret gist (one site, one browser storage), this app's own file in it,
+// so a bet logged on the phone shows on the PC. Records carry mt (newest edit wins); deletions are tombstones; the pot
+// (nfltd_bank) rides along and merges by its mt. Set up once in the NFL app's bet log (☁ Sync).
+const SYNC_FILE='nhl-sync.json', GH='https://api.github.com';
+let TOMB=lsJ('nhlp_tomb', {})||{}, SYNC_ERR=null, SYNC_OK=0, syncBusy=false, syncAgain=false, syncTimer=null;
+const recBody=r=>{ const {mt, ...rest}=r; return JSON.stringify(rest); }, snapOf=L=>new Map(L.map(r=>[r.id, recBody(r)]));
+let betSnap=snapOf(bets);
+function stampChanges(){ const now=Date.now(), seen=new Set(); for(const r of bets){ seen.add(r.id); if(betSnap.get(r.id)!==recBody(r)) r.mt=now; delete TOMB[r.id]; } for(const k of betSnap.keys()) if(!seen.has(k)) TOMB[k]=now; betSnap=snapOf(bets); lsW('nhlp_tomb', TOMB); }
+function mergeRecs(local, remote){ const known=x=>(x.result&&x.result!=='pending'?2:0)+(x.closeOdds?1:0), pick=(a,b)=>{ if(!a) return b; const ma=a.mt||0, mb=b.mt||0; if(ma!==mb) return ma>mb?a:b; return known(b)>known(a)?b:a; };
+  const m=new Map(local.map(r=>[r.id, r])); for(const r of (remote||[])) if(r&&r.id) m.set(r.id, pick(m.get(r.id), r)); return [...m.values()].filter(r=>!(TOMB[r.id]>=(r.mt||0))); }
+const syncCfg=()=>lsJ('nfltd_sync', {})||{};
+async function gh(p, opt){ opt=opt||{}; const r=await fetch(GH+p, {method:opt.method||'GET', cache:'no-store', body:opt.body, headers:Object.assign({Authorization:'Bearer '+syncCfg().token, Accept:'application/vnd.github+json'}, opt.body?{'Content-Type':'application/json'}:{})}); if(!r.ok){ const e=new Error('GitHub '+r.status); e.status=r.status; throw e; } return r.json(); }
+function syncSoon(ms){ if(!syncCfg().token) return; clearTimeout(syncTimer); syncTimer=setTimeout(syncNow, ms==null?2500:ms); }
+function syncNote(){ const el=$('syncNote'); if(!el) return; const C=syncCfg();
+  el.innerHTML=!C.token?'<a href="../nfl-td-predictor/" title="☁ Sync keeps your bets the same on every device — set it up once in the NFL app\'s bet log; it covers all three sports">☁ Sync: set up in 🏈 NFL</a>':SYNC_ERR?`<span style="color:var(--warn)">☁ ${esc(SYNC_ERR)}</span>`:SYNC_OK?`☁ synced ${new Date(SYNC_OK).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}`:'☁ Sync on'; }
+async function syncNow(){ const C=syncCfg(); if(!C.token){ syncNote(); return; } if(syncBusy){ syncAgain=true; return; } syncBusy=true;
+  try{ let gid=C.gistId;
+    if(!gid){ for(let page=1; page<=5&&!gid; page++){ const list=await gh(`/gists?per_page=100&page=${page}`); const hit=list.find(x=>x.files&&(x.files['nfl-td-sync.json']||x.files[SYNC_FILE])); if(hit) gid=hit.id; if(list.length<100) break; }
+      if(!gid){ SYNC_ERR='open the NFL app once to start sync'; return; } }
+    const gist=await gh('/gists/'+gid), f=gist.files&&gist.files[SYNC_FILE]; let remote=null;
+    if(f){ let txt=f.content; if(f.truncated&&f.raw_url) txt=await (await fetch(f.raw_url,{cache:'no-store'})).text(); try{ remote=JSON.parse(txt); }catch(e){} }
+    if(remote){ for(const [k,t] of Object.entries(remote.tomb||{})) if(!(TOMB[k]>=t)) TOMB[k]=t; const before=JSON.stringify(bets);
+      bets=mergeRecs(bets, remote.bets).sort((x,y)=>String(y.ts).localeCompare(String(x.ts)));
+      if(remote.bank&&(remote.bank.mt||0)>(BANK.mt||0)){ BANK=remote.bank; lsW('nfltd_bank', BANK); }
+      betSnap=snapOf(bets); lsW('nhlp_bets', bets); lsW('nhlp_tomb', TOMB); if(JSON.stringify(bets)!==before) renderAll(); }
+    const mine={app:'nhl-prop-predictor', v:1, at:new Date().toISOString(), bets, tomb:TOMB, bank:BANK}, canon=p=>JSON.stringify([p.bets, p.tomb, p.bank||null]);
+    if(!remote||canon(mine)!==canon(remote)) await gh('/gists/'+gid, {method:'PATCH', body:JSON.stringify({files:{[SYNC_FILE]:{content:JSON.stringify(mine)}}})});
+    SYNC_OK=Date.now(); SYNC_ERR=null;
+  }catch(e){ SYNC_ERR=e.status===401?'token rejected — reconnect ☁ Sync in the NFL app':(e.status===403||e.status===404)?'GitHub refused — check ☁ Sync in the NFL app':'offline — will retry'; }
+  finally{ syncBusy=false; syncNote(); if(syncAgain){ syncAgain=false; syncSoon(400); } } }
+function saveBets(){ stampChanges(); lsW('nhlp_bets', bets); renderAll(); syncSoon(); }
 
 // ---------------------------------------------------------------- odds: your books, tickets, links, the other books
 const ODDS_API='https://api.the-odds-api.com/v4/sports/icehockey_nhl';
@@ -521,20 +574,31 @@ function renderBets(){
   const g=v=>v>0?'ev-pos':(v<0?'ev-neg':''), sgn=v=>(v>=0?'+':'')+v, pc=v=>sgn((v*100).toFixed(1))+'%', usdOn=!!BANK.amt, mny=v=>usdOn?(v>=0?'+':'')+fmtUsd(v):sgn(v.toFixed(2))+'u', amt=v=>usdOn?fmtUsd(v):v.toFixed(1)+'u';
   const rows=bets.map(b=>{ const dec=oddsDec(b.odds), cd=oddsDec(b.closeOdds), nd=!cd&&b.cur&&b.cur.q?oddsDec(b.cur.q):null;
     return {b, clv:dec&&cd?dec/cd-1:null, live:dec&&nd?dec/nd-1:null, stk:usdOn?(betUsd(b)||0):(+b.stake||0), pl:betPl(b)}; });
-  const agg=R=>{ let w=0,l=0,p=0,st=0,net=0,cs=0,cn=0,cp=0,open=0,spent=0; for(const r of R){ const x=r.b.result; spent+=r.stk; if(x==='win'||x==='loss'){ x==='win'?w++:l++; st+=r.stk; net+=r.pl||0; } else if(x==='push') p++; else open++; if(r.clv!=null){ cs+=r.clv; cn++; if(r.clv>0) cp++; } }
-    return {n:R.length,w,l,p,net,spent,roi:st?net/st:null,clv:cn?cs/cn:null,cn,cp,open}; }, rec=a=>`${a.w}-${a.l}${a.p?'-'+a.p:''}`, A=agg(rows);
+  const agg=R=>{ let w=0,l=0,p=0,st=0,net=0,cs=0,cn=0,cp=0,open=0,spent=0,riding=0; for(const r of R){ const x=r.b.result; spent+=r.stk; if(x==='win'||x==='loss'){ x==='win'?w++:l++; st+=r.stk; net+=r.pl||0; } else if(x==='push') p++; else { open++; riding+=r.stk; } if(r.clv!=null){ cs+=r.clv; cn++; if(r.clv>0) cp++; } }
+    return {n:R.length,w,l,p,net,spent,riding,roi:st?net/st:null,clv:cn?cs/cn:null,cn,cp,open}; }, rec=a=>`${a.w}-${a.l}${a.p?'-'+a.p:''}`, A=agg(rows);
   let html=`<div class="logsum"><span>Record <b>${rec(A)}</b></span><span>Spent <b>${amt(A.spent)}</b></span><span>Won/lost <b class="${g(A.net)}">${mny(A.net)}</b></span><span>ROI <b class="${g(A.roi)}">${A.roi==null?'—':pc(A.roi)}</b></span>`+
     `<span title="how much better your price was than the closing price">CLV <b class="${g(A.clv)}">${A.clv==null?'—':pc(A.clv)}</b>${A.cn?` <span class="muted">(${Math.round(A.cp/A.cn*100)}% beat the close)</span>`:''}</span>${A.open?`<span><b>${A.open}</b> open</span>`:''}</div>`;
-  const dayOf=b=>{ const d=new Date(b.ko||b.ts); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); }, days=new Map(); for(const r of rows){ const k=dayOf(r.b); (days.get(k)||days.set(k,[]).get(k)).push(r); }
-  [...days.keys()].sort((a,b)=>b-a).forEach((dk,di)=>{ const R=days.get(dk), a=agg(R), open=LOGOPEN.has(dk)?LOGOPEN.get(dk):(di===0||a.open>0);
-    html+=`<details class="daygrp" data-d="${dk}"${open?' open':''}><summary><b>${new Date(dk).toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'})}</b> <span class="muted">· ${a.n} bet${a.n>1?'s':''}${a.open?` · ${a.open} open`:''}${a.w+a.l?` · ${rec(a)}`:''} · spent ${amt(a.spent)}</span>${a.w+a.l?` <b class="${g(a.net)}">${mny(a.net)}</b>`:''}${a.clv!=null?` <span class="muted">· CLV</span> <b class="${g(a.clv)}">${pc(a.clv)}</b>`:''}</summary>`+
-      `<div class="scroll"><table><thead><tr><th class="l">Bet</th><th>Odds</th><th>Close · CLV</th><th>Stake</th><th>Result</th><th>P/L</th><th></th></tr></thead><tbody>`+
+  // weeks (Monday -> Sunday) -> nights -> bets, like the NFL app's weeks -> games: each week opens with its money line;
+  // nights start collapsed and tonight's is marked
+  const dayOf=b=>{ const d=new Date(b.ko||b.ts); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); };
+  const weekOf=t=>{ const d=new Date(t); d.setDate(d.getDate()-((d.getDay()+6)%7)); return d.getTime(); }, fmtD=t=>new Date(t).toLocaleDateString([], {month:'short', day:'numeric'});
+  const tonight=SLATE_DAY?new Date(+SLATE_DAY.slice(0,4), +SLATE_DAY.slice(4,6)-1, +SLATE_DAY.slice(6,8)).getTime():null;
+  const weeks=new Map(); for(const r of rows){ const w=weekOf(dayOf(r.b)); (weeks.get(w)||weeks.set(w,[]).get(w)).push(r); }
+  const upTo=new Map(); { let sp=0, nt=0; for(const w of [...weeks.keys()].sort((a,b)=>a-b)){ const a=agg(weeks.get(w)); sp+=a.spent; nt+=a.net; upTo.set(w,{spent:sp, net:nt}); } }
+  const table=R=>`<div class="scroll"><table><thead><tr><th class="l">Bet</th><th>Odds</th><th>Close · CLV</th><th>Stake</th><th>Result</th><th>P/L</th><th></th></tr></thead><tbody>`+
       R.map(({b,clv,live,pl})=>{ const mine=+String(b.market).split('|')[3], moved=b.cur&&b.cur.l!=null&&b.cur.l!==mine, arrow=moved?(b.cur.l<mine?'▼':'▲')+b.cur.l+' ':'';
         const clvTxt=clv!=null?` <b class="${g(clv)}">${pc(clv)}</b>${b.closeEst?'<span class="muted" title="the line moved — this is the equivalent price at your line"> ≈</span>':''}`:b.result!=='pending'||!b.cur?'':live!=null?` <span class="${g(live)}" style="font-size:12px;opacity:.85" title="${esc((moved?`the line moved to ${b.cur.l} (${b.cur.o}) — about ${b.cur.q} at your line. `:`now ${b.cur.q}. `)+'A live read, not final until the close.')}">${arrow}≈${pc(live)}</span>`:moved?` <span class="muted" style="font-size:12px">${arrow}</span>`:'';
         return `<tr><td class="l"><b title="chance when logged: ${b.modelProb!=null?pct(b.modelProb):'—'}">${esc(b.player)}</b> <span class="muted">${mktLabel(b.market)} · ${esc(fmtGame(b.game))}</span>${b.offBoard&&b.result==='pending'?' <span style="color:var(--warn);font-size:12px" title="your book no longer offers this prop">⚠ off the board</span>':''}</td>`+
           `<td class="odds">${esc(b.odds)}${bkBadge(b.book)}</td><td><input class="betclose" data-id="${b.id}" value="${esc(b.closeOdds||'')}" placeholder="close" style="width:62px;font-family:var(--mono);font-size:13px;text-align:right">${clvTxt}</td>`+
           `<td title="${b.stake}u">${betStakeTxt(b)}</td><td><select class="betres ss" data-id="${b.id}">${['pending','win','loss','push'].map(x=>`<option${x===b.result?' selected':''}>${x}</option>`).join('')}</select>${b.auto&&b.result!=='pending'?` <span title="${esc('settled from ESPN: '+b.auto)}">🤖</span>`:''}${b.result==='pending'&&b.autoNote?` <span title="${esc(b.autoNote)}" style="cursor:help">✋</span>`:''}</td>`+
-          `<td class="${pl!=null?g(pl):''}">${pl==null?'—':mny(pl)}</td><td><button class="ss betdel" data-id="${b.id}" style="color:var(--warn)">✕</button></td></tr>`; }).join('')+`</tbody></table></div></details>`; });
+          `<td class="${pl!=null?g(pl):''}">${pl==null?'—':mny(pl)}</td><td><button class="ss betdel" data-id="${b.id}" style="color:var(--warn)">✕</button></td></tr>`; }).join('')+`</tbody></table></div>`;
+  [...weeks.keys()].sort((a,b)=>b-a).forEach((ws,wi)=>{ const R=weeks.get(ws), a=agg(R), wOpen=LOGOPEN.has('W'+ws)?LOGOPEN.get('W'+ws):(wi===0||a.open>0);
+    html+=`<details class="weekgrp" data-w="${ws}"${wOpen?' open':''}><summary><b>Week of ${fmtD(ws)}</b> <span class="muted">· ${a.n} bet${a.n>1?'s':''}${a.open?` · ${a.open} open`:''}${a.w+a.l?` · ${rec(a)}`:''}</span>${a.clv!=null?` <span class="muted">· CLV</span> <b class="${g(a.clv)}">${pc(a.clv)}</b>`:''}`+
+      `<span class="wktally">💵 Spent <b>${amt(a.spent)}</b> · Won/lost <b class="${g(a.net)}">${a.w+a.l?mny(a.net):'—'}</b>${a.riding?` · <span class="muted">${amt(a.riding)} still riding</span>`:''}<span class="muted"> · season so far: spent ${amt(upTo.get(ws).spent)}, <b class="${g(upTo.get(ws).net)}">${mny(upTo.get(ws).net)}</b></span></span></summary><div class="wkbody">`;
+    const days=new Map(); for(const r of R){ const k=dayOf(r.b); (days.get(k)||days.set(k,[]).get(k)).push(r); }
+    [...days.keys()].sort((x,y)=>y-x).forEach(dk=>{ const D=days.get(dk), da=agg(D), open=LOGOPEN.has(dk)?LOGOPEN.get(dk):false;
+      html+=`<details class="daygrp${dk===tonight?' curday':''}" data-d="${dk}"${open?' open':''}><summary><b>${new Date(dk).toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'})}</b> <span class="muted">· ${da.n} bet${da.n>1?'s':''}${da.open?` · ${da.open} open`:''}${da.w+da.l?` · ${rec(da)}`:''} · spent ${amt(da.spent)}</span>${da.w+da.l?` <b class="${g(da.net)}">${mny(da.net)}</b>`:''}</summary>`+table(D)+'</details>'; });
+    html+='</div></details>'; });
   body.innerHTML=html;
 }
 function renderTest(){ const bt=M.backtest||{}; $('testNote').innerHTML=`<b>How the simulator was tested.</b> Every game of the ${M.test-1}-${String(M.test).slice(2)} season, using only what was known before puck drop (settings learned on ${M.train-1}-${String(M.train).slice(2)}; tonight's starting goalie treated as known, as it is announced before the game). Each bet was a book-like line — shots at his season average on the half shot, goals and points at 0.5 — scored separately on the two halves of the season:`+
@@ -582,8 +646,8 @@ $('boardAll').onchange=renderBoard; $('cardN').onchange=renderAll; $('pullAll').
 $('betBody').addEventListener('change', e=>{ const b=bets.find(x=>x.id===e.target.dataset.id); if(!b) return;
   if(e.target.classList.contains('betclose')){ b.closeOdds=e.target.value.trim(); delete b.closeEst; } else if(e.target.classList.contains('betres')){ b.result=e.target.value; delete b.auto; if(b.result==='pending') delete b.st; else b.st=Date.now(); } saveBets(); });
 $('betBody').addEventListener('click', e=>{ const d=e.target.closest('.betdel'); if(d){ bets=bets.filter(x=>x.id!==d.dataset.id); saveBets(); } });
-$('betBody').addEventListener('toggle', e=>{ const d=e.target; if(d.classList&&d.classList.contains('daygrp')) LOGOPEN.set(+d.dataset.d, d.open); }, true);
-$('bankUsd').addEventListener('change', e=>{ const v=+e.target.value||0; BANK=v>0?{amt:+v.toFixed(2), at:Date.now()}:{amt:null, at:0}; lsW('nhlp_bank', BANK); renderAll(); });
+$('betBody').addEventListener('toggle', e=>{ const d=e.target; if(!d.classList) return; if(d.classList.contains('daygrp')) LOGOPEN.set(+d.dataset.d, d.open); else if(d.classList.contains('weekgrp')) LOGOPEN.set('W'+d.dataset.w, d.open); }, true);
+$('bankUsd').addEventListener('change', e=>{ const v=+e.target.value||0; BANK=v>0?{amt:+v.toFixed(2), at:Date.now()}:{amt:null, at:0}; saveBank(); renderAll(); });
 $('bankUsd').addEventListener('keydown', e=>{ if(e.key==='Enter') e.target.blur(); });
 $('betExport').onclick=()=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify({app:'nhl-prop-predictor', exportedAt:new Date().toISOString(), bets, bank:BANK},null,1)],{type:'application/json'})); a.download=`nhl-bets-${new Date().toISOString().slice(0,10)}.json`; document.body.appendChild(a); a.click(); setTimeout(()=>a.remove(),500); };
 $('betImport').onclick=()=>$('betImportFile').click();
@@ -606,7 +670,8 @@ function showTab(t){ document.body.dataset.mtab=t; document.querySelectorAll('#m
 $('mtabbar').addEventListener('click', e=>{ const b=e.target.closest('button[data-t]'); if(b){ showTab(b.dataset.t); window.scrollTo(0,0); } });
 showTab(lsJ('nhlp_mtab','card'));
 
-renderTest(); renderAll(); loadSlate(); loadInjuries();
+renderTest(); renderAll(); loadSlate(); loadInjuries(); syncNote();
+setTimeout(()=>syncNow(), 2000); setInterval(()=>syncNow(), 5*60e3); window.addEventListener('focus', ()=>syncSoon(500));
 setTimeout(()=>autoSettle(false), 4000); setInterval(()=>autoSettle(false), 10*60e3);
 })();
 </script>

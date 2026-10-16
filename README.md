@@ -5,6 +5,11 @@ One HTML file (`nhl-prop-predictor.html`) that projects NHL player props — **s
 app to the [NFL anytime-TD simulator](https://github.com/popcawn/nfl-td-predictor) and the
 [NBA prop simulator](https://github.com/popcawn/nba-prop-predictor); same ideas, same honesty rules.
 
+## One site, one pot
+The NFL, NBA and NHL simulators are one site: the 🏈 · 🏀 · 🏒 switcher at the top moves between them, and they share
+**one bankroll** — a bet settled in any sport moves it, and every stake is a % of it. ☁ Sync (set up once in the NFL
+app) keeps all three sports' bets the same on every device.
+
 ## Using it
 - **Games** — tonight's slate (ESPN, live). Click a game to see both teams. Each team's **goalie** is picked for you
   (ESPN's probable starter) — change it if the news says otherwise; it moves the other team's goal and point numbers.
