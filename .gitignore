@@ -1,0 +1,10 @@
+# runtime / scratch
+*.log
+node_modules/
+_mock*
+# The Odds API: the key and raw historical prices stay local (paid data, not for a public repo)
+.odds-key
+market_hist/
+market_*.json
+bt_*.json
+!market_anchor.json

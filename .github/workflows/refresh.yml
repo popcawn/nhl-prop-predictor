@@ -1,0 +1,40 @@
+name: Refresh data
+
+# Rebuilds the snapshot on GitHub's servers and commits it, so the GitHub Pages copy stays current without any PC
+# being on. Only last night's box scores are downloaded (the game logs are committed in data/). The slate, injuries
+# and prices refresh live inside the app.
+on:
+  schedule:
+    # Daily at 11:47 UTC (~7:47 AM ET): every game from the night before is final by then, West Coast included.
+    - cron: '47 11 * * *'
+  workflow_dispatch:
+  push:
+    paths: ['.github/workflows/refresh.yml']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Build snapshot
+        run: node build-nhl-snapshot.mjs
+      - name: Commit refreshed data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add nhl-prop-predictor.html nhl-snapshot.json data/
+          if git diff --cached --quiet; then echo "No data changes."; exit 0; fi
+          git commit -m "Data refresh $(date -u +%Y-%m-%d)"
+          git pull --rebase origin main
+          git push

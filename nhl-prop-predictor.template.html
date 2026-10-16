@@ -1,0 +1,608 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NHL Prop Simulator</title>
+<style>
+  :root{--bg:#0a0e13;--panel:#121923;--panel2:#18212d;--line:#1d2836;--line2:#2a3849;--ink:#e8eef6;--ink2:#a8b6c7;--ink3:#7c8b9d;--accent:#4da3ff;--good:#34d399;--bad:#f87171;--warn:#fbbf24;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  a{color:var(--accent)}
+  .wrap{max-width:1500px;margin:0 auto;padding:14px 18px 60px}
+  header.top{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap;margin-bottom:10px}
+  header.top h1{font-size:20px;margin:0}
+  h2{font-size:12px;text-transform:uppercase;letter-spacing:.14em;color:var(--ink2);margin:22px 0 8px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
+  .muted{color:var(--ink3)} .odds{font-family:var(--mono)}
+  .ev-pos{color:var(--good);font-weight:800} .ev-neg{color:var(--ink3)}
+  input,select,textarea{background:var(--panel2);color:var(--ink);border:1px solid var(--line2);border-radius:8px;padding:5px 8px;font:inherit}
+  button{font:inherit;cursor:pointer}
+  .btn{background:var(--accent);color:#04121f;border:0;border-radius:10px;font-weight:800;padding:7px 14px}
+  .btn:disabled{opacity:.5;cursor:default}
+  .ss{background:var(--panel2);color:var(--ink);border:1px solid var(--line2);border-radius:8px;padding:3px 9px;font-size:12px;text-decoration:none;display:inline-block}
+  .book{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;align-items:start}
+  .bmain{min-width:0;container-type:inline-size}
+  @media(min-width:1200px){ .book{grid-template-columns:minmax(0,1fr) 360px} .bslip{grid-column:2;grid-row:1;position:sticky;top:8px;max-height:calc(100vh - 16px);overflow-y:auto;scrollbar-width:thin} .bmain{grid-column:1;grid-row:1} }
+  .bslip h2:first-child{margin-top:0}
+  table{width:100%;border-collapse:collapse}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink2);text-align:right;padding:8px 7px;border-bottom:1px solid var(--line2);white-space:nowrap}
+  td{padding:7px 7px;text-align:right;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;white-space:nowrap}
+  th.l,td.l{text-align:left}
+  .scroll{overflow-x:auto}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{background:var(--panel2);border:1px solid var(--line2);border-radius:10px;padding:6px 10px;cursor:pointer;font-size:13px;line-height:1.3}
+  .chip.on{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+  .chip small{display:block;color:var(--ink3);font-size:11px}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+  .tab{background:var(--panel2);border:1px solid var(--line2);border-radius:999px;padding:5px 12px;font-size:13px;color:var(--ink2)}
+  .tab.on{background:var(--accent);color:#04121f;border-color:var(--accent);font-weight:800}
+  .vb{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.03em;border-radius:6px;padding:2px 7px;border:1px solid var(--line2)}
+  .vb-take{background:var(--good);color:#04121f;border-color:var(--good)} .vb-edge{color:var(--ink2)} .vb-flag{color:var(--warn);border-color:var(--warn)}
+  .bktag{font-size:10px;font-weight:800;letter-spacing:.04em;padding:1px 5px;border-radius:5px;border:1px solid var(--line2);color:var(--ink2);margin-left:4px}
+  .conf{font-size:11px;font-weight:800;border-radius:6px;padding:2px 6px;border:1px solid var(--line2)}
+  .conf.hi{color:var(--good);border-color:var(--good)} .conf.md{color:var(--warn);border-color:var(--warn)} .conf.lo{color:var(--bad);border-color:var(--bad)}
+  .cpick{padding:8px 0;border-bottom:1px solid var(--line)} .cpick:last-of-type{border-bottom:0}
+  .cp1{display:flex;gap:8px;align-items:center} .cp2{font-size:13px;margin-top:2px}
+  .cpick.cnew{background:rgba(77,163,255,.10);border:1px solid rgba(77,163,255,.55);border-left:4px solid var(--accent);border-radius:9px;padding:7px 9px;margin:4px 0}
+  .cpick.cdone{opacity:.62}
+  .newtag{font-size:10px;font-weight:900;letter-spacing:.07em;color:#04121f;background:var(--accent);border-radius:5px;padding:1px 6px}
+  .cardstat{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px;font-weight:900;font-size:15px;letter-spacing:.05em;padding:8px 11px;border-radius:9px;margin:4px 0 9px}
+  .cardstat span{font-weight:500;letter-spacing:0;font-size:12.5px;color:var(--ink2)}
+  .cardstat.done{background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.5);color:var(--good)}
+  .cardstat.new{background:rgba(77,163,255,.14);border:1px solid var(--accent);color:var(--accent)}
+  .cardstat.none{background:var(--panel2);border:1px solid var(--line2);color:var(--ink2)}
+  .tm{display:inline-block;width:4px;height:16px;border-radius:2px;vertical-align:-3px;margin-right:6px}
+  .logsum{display:flex;gap:18px;flex-wrap:wrap;align-items:baseline;margin-bottom:10px;padding:9px 12px;background:var(--panel2);border:1px solid var(--line2);border-radius:10px;font-size:13px}
+  details.daygrp{margin:0 0 6px} details.daygrp>summary{cursor:pointer;padding:8px 2px;font-size:14px;border-bottom:1px solid var(--line2)} details.daygrp[open]>summary{margin-bottom:8px}
+  .sub{margin-top:12px}
+  .rowtake td{background:rgba(52,211,153,.06)}
+  .stsel{font-size:11px;padding:1px 2px}
+  table.gt th, table.gt td{padding:6px 5px;font-size:13px}
+  table.gt td.px{line-height:1.2} table.gt td.px small{display:block;font-size:11px}
+  .gsel{font-size:12px;padding:2px 4px;max-width:210px}
+  @container (max-width:900px){ .hide900{display:none} }
+  @container (max-width:640px){ .hide640{display:none} }
+  /* phones: one tab at a time (sections carry data-m) */
+  .mtabbar{display:none}
+  @media(max-width:760px){
+    .wrap{padding:10px 12px 84px}
+    .mtabbar{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:60;background:rgba(10,14,19,.97);border-top:1px solid var(--line);padding:5px 4px calc(5px + env(safe-area-inset-bottom))}
+    .mtabbar button{flex:1;background:none;border:none;color:var(--ink3);font-size:11px;font-weight:800;padding:3px 0;display:flex;flex-direction:column;align-items:center;gap:1px}
+    .mtabbar button span{font-size:19px;line-height:1.1}
+    .mtabbar button.on{color:var(--accent)}
+    body[data-mtab="card"] [data-m]:not([data-m="card"]),body[data-mtab="games"] [data-m]:not([data-m="games"]),body[data-mtab="priced"] [data-m]:not([data-m="priced"]),body[data-mtab="bets"] [data-m]:not([data-m="bets"]){display:none!important}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>🏒 NHL Prop Simulator</h1>
+    <span id="slateLbl" class="muted"></span>
+    <span class="muted" style="margin-left:auto;font-size:12px" id="builtLbl"></span>
+  </header>
+  <div class="book">
+    <aside class="bslip">
+      <h2 data-m="bets">Bankroll</h2>
+      <div class="panel" data-m="bets">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <span style="font-size:20px;font-weight:800">$</span>
+          <input id="bankUsd" type="number" min="0" step="1" placeholder="your bankroll" style="width:120px;font-size:16px;font-weight:700" title="what's in your betting account right now — type a new number after a deposit or a withdrawal">
+          <span id="bankNow" style="font-size:12px"></span>
+        </div>
+        <div id="bankNote" class="muted" style="font-size:12px;margin-top:6px"></div>
+      </div>
+
+      <h2 data-m="card">Odds</h2>
+      <div class="panel" data-m="card">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <button class="btn" id="pullAll">⚡ Pull tonight</button>
+          <span id="pullMsg" class="muted" style="font-size:12px"></span>
+          <span id="oddsLeft" class="muted" style="font-size:11px;margin-left:auto"></span>
+        </div>
+        <details id="oddsCfg" style="margin-top:8px;font-size:12px"><summary class="muted" style="cursor:pointer">odds settings</summary>
+          <div style="margin-top:6px;display:flex;flex-direction:column;gap:7px;line-height:1.5">
+            <div>The Odds API key <input id="oddsKeyIn" type="password" placeholder="paste key" autocomplete="off" spellcheck="false" style="width:160px;font-size:12px"> <button class="ss" id="oddsKeySave">save</button> <span id="oddsKeyMsg" class="muted"></span></div>
+            <div><b>My sportsbooks</b> <span class="muted">— you see the best price among these; every other book is "the market"</span><br>
+              <label><input type="checkbox" class="bkchk" value="fanduel" checked disabled> FanDuel</label> <label><input type="checkbox" class="bkchk" value="draftkings"> DraftKings</label> <label><input type="checkbox" class="bkchk" value="betmgm"> BetMGM</label> <label><input type="checkbox" class="bkchk" value="williamhill_us"> Caesars</label> <label><input type="checkbox" class="bkchk" value="fanatics"> Fanatics</label></div>
+            <div>Your state <select id="oddsState" class="ss"><option value="">— pick —</option></select> <span class="muted">— BetMGM and Caesars put it in their bet-slip links</span></div>
+            <div><b>What a pull fetches</b> <span class="muted">— 1 credit each, per game:</span> <b id="oddsCost"></b><br>
+              <label><input type="checkbox" class="mkchk" value="player_shots_on_goal"> Shots on goal</label> <label><input type="checkbox" class="mkchk" value="player_goal_scorer_anytime"> Anytime goal</label> <label><input type="checkbox" class="mkchk" value="player_points"> Points</label> <label><input type="checkbox" class="mkchk" value="player_goals"> Goals over/under <span class="muted">(fewer books; sharpens the goal price)</span></label></div>
+            <div>Never pull below <input id="oddsReserve" type="number" min="0" step="10" style="width:70px;font-size:12px"> credits <span class="muted">(kept for your other apps on this key)</span></div>
+            <div class="muted">A pull returns every US book for the same credits. Games are nightly — 8 games × 3 markets is 24 credits a pull — so nothing is pulled automatically: use ⚡ on one game, or Pull tonight.</div>
+          </div>
+        </details>
+      </div>
+
+      <h2 data-m="card">Tonight's card</h2>
+      <div class="panel" id="cardPanel" data-m="card">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px" class="muted">
+          <label>Show <select id="cardN" class="ss"><option>3</option><option selected>5</option><option>8</option></select> bets</label>
+        </div>
+        <div id="cardBody" style="margin-top:6px"></div>
+      </div>
+    </aside>
+
+    <div class="bmain">
+      <h2 style="margin-top:0" data-m="games">Games</h2>
+      <div class="panel" data-m="games">
+        <div id="slateChips" class="chips"></div>
+        <div id="slateNote" class="muted" style="font-size:12px;margin-top:8px"></div>
+      </div>
+
+      <h2 id="gameHdr" data-m="games">Players</h2>
+      <div class="panel" data-m="games">
+        <div class="tabs" id="statTabs"></div>
+        <div id="gameBody"></div>
+        <details class="muted" style="margin-top:8px;font-size:12px"><summary style="cursor:pointer">ⓘ How to read this</summary>
+          <div style="margin-top:6px;line-height:1.6">
+            <b>Proj</b> is the simulator's number: his expected ice time × his per-minute rate (recent games count more; last season counts 40%), adjusted for how many shots the opponent allows, how good tonight's goalie is, and the game total. Pick each team's <b>goalie</b> (ESPN's probable starter is the default) and set a skater to OUT if he's scratched.
+            <b>Chance</b> is what a bet is judged on: the <i>other</i> books' price for that line with their cut removed. For shots and points it is nudged toward the simulator (10%, never more than 3 points); for <b>anytime goal</b> it is the market alone, as with NFL touchdowns. <b>EV</b> compares that chance with the best price at your books.
+            <b>Not tested against real NHL prices yet.</b> Treat an edge as "your book is out of line with the others" and let the bet log's CLV tell you whether it works.
+          </div>
+        </details>
+      </div>
+
+      <h2 data-m="priced">★ Priced — every game you've pulled</h2>
+      <div class="panel" data-m="priced">
+        <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:6px">
+          <span id="boardHead" class="muted" style="font-size:13px"></span>
+          <label class="muted" style="font-size:12px"><input type="checkbox" id="boardAll"> show prices with no edge</label>
+        </div>
+        <div class="scroll"><table><thead><tr><th class="l">Player</th><th class="l">Bet</th><th>Odds</th><th class="hide640">Proj</th><th>Chance</th><th>EV</th><th class="hide900">Confidence</th><th>Verdict</th><th></th></tr></thead><tbody id="boardBody"></tbody></table></div>
+      </div>
+
+      <h2 data-m="bets">Bet log</h2>
+      <div class="panel" data-m="bets">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+          <span id="autoMsg" class="muted" style="font-size:12px"></span>
+          <span style="margin-left:auto;display:flex;gap:6px"><button class="ss" id="closeNow" title="fill Close on every open bet whose game hasn't started, from your books' current price (1 credit per market per game)">⚡ Closing prices</button><button class="ss" id="settleNow">🤖 Settle now</button></span>
+        </div>
+        <div id="betBody"></div>
+        <details style="margin-top:12px"><summary style="cursor:pointer;font-size:13px;font-weight:700">⚙ More <span class="muted" style="font-weight:400">— how it was tested · backup</span></summary>
+          <div class="sub" id="testNote" style="font-size:13px;line-height:1.55"></div>
+          <div class="sub"><b>Backup</b> <button class="ss" id="betExport">⬇ Export</button> <button class="ss" id="betImport">⬆ Import</button> <input type="file" id="betImportFile" accept=".json,application/json" style="display:none"> <button class="ss" id="betClear">Clear log</button></div>
+          <div class="sub muted" style="font-size:12px;line-height:1.55"><b>How to read it.</b> <b>CLV</b> = how much better your price was than the closing price at the same book; beat the close over many bets and profit follows. A grey <b>≈</b> CLV is a live read from your last pull. <b>▼ / ▲</b> = the book moved the line since you bet. <b>🤖</b> = settled from ESPN's box score (a scratched player is a void). <b>✋</b> = settle that one yourself.</div>
+        </details>
+      </div>
+    </div>
+  </div>
+</div>
+<nav class="mtabbar" id="mtabbar"><button data-t="card"><span>🎯</span>Card</button><button data-t="games"><span>🏒</span>Games</button><button data-t="priced"><span>★</span>Priced</button><button data-t="bets"><span>📓</span>Bets</button></nav>
+
+<script>/*__SNAPSHOT__*/</script>
+<script>
+(function(){
+'use strict';
+const S=window.__SNAPSHOT__, M=S.model, STATS=Object.keys(M.stats);
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const pct=p=>(p*100).toFixed(1)+'%', clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
+const lsJ=(k,d)=>{ try{ const v=localStorage.getItem(k); return v==null?d:JSON.parse(v); }catch(e){ return d; } };
+const lsW=(k,v)=>{ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} };
+const americanToDec=a=>{ a=+a; if(!a) return null; return a>0?1+a/100:1+100/(-a); };
+const americanToProb=a=>{ a=+a; if(!a) return null; return a>0?100/(a+100):(-a)/((-a)+100); };
+const probToAmerican=p=>{ p=clamp(p,0.001,0.999); const a=p>=0.5?-Math.round(100*p/(1-p)):Math.round(100*(1-p)/p); return (a>0?'+':'')+a; };
+const fmtAm=v=>(v>0?'+':'')+v, oddsDec=s=>americanToDec(parseFloat(String(s).replace('−','-')));
+const median=a=>{ const s=a.slice().sort((x,y)=>x-y), n=s.length; return n?(n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2):null; };
+const logit=p=>Math.log(p/(1-p)), expit=x=>1/(1+Math.exp(-x));
+const normName=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\b(jr|sr|ii|iii|iv|v)\b\.?/g,'').replace(/[^a-z]/g,'');
+const SHORT={sog:'Shots on goal', goal:'Anytime goal', pts:'Points'};
+const mktKey=(s,side,line)=>`P|${s}|${side}|${line}`;
+const mktLabel=m=>{ const [,s,side,l]=String(m).split('|'); if(m==='custom') return 'Custom'; if(s==='goal'&&+l===0.5) return side==='O'?'Anytime goal':'No goal'; return `${SHORT[s]||s} ${side==='O'?'over':'under'} ${l}`; };
+const teamColor=a=>(S.teams[a]&&S.teams[a].color)||'#666';
+// readable name color on the dark page: the team color, else its alternate, else plain text (Boston's is nearly black)
+const lum=c=>{ const n=parseInt(String(c||'#000').slice(1),16)||0; return (0.299*(n>>16)+0.587*((n>>8)&255)+0.114*(n&255))/255; };
+const teamText=a=>{ const t=S.teams[a]; if(!t) return 'var(--ink)'; return lum(t.color)>0.35?t.color:lum(t.alt)>0.35?t.alt:'var(--ink)'; };
+const fmtGame=g=>{ const [a,h]=String(g).split('@'); const sh=x=>S.teams[x]?S.teams[x].short:x; return sh(a)+' @ '+sh(h); };
+
+// ---------------------------------------------------------------- the model (a copy of the build's — keep identical)
+function pOver(mu, r, L){
+  if(!(mu>0)) return 0; const k=Math.floor(L); if(k<0) return 1;
+  const pois=!(r<1e6); let p=pois?Math.exp(-mu):Math.pow(r/(r+mu),r), c=p;
+  for(let i=0;i<k;i++){ p*=pois?mu/(i+1):(i+r)/(i+1)*mu/(r+mu); c+=p; }
+  return clamp(1-c,0,1);
+}
+function project(F, D, sv, ou){
+  const L=M.lg; let fS=1, fG=1;
+  if(M.opp&&D) fS=Math.pow(D.sa/L.sa, M.gs);
+  if(M.goalie&&sv!=null) fG=Math.pow((1-sv)/(1-L.sv), M.gv); else if(D) fG=Math.pow((D.ga/D.sa)/(L.ga/L.sa), M.gv);
+  const cx=s=>((M.ctx||[]).includes(s)&&ou>=4.5&&M.ouAvg)?Math.exp(M.a[s]*(ou-M.ouAvg)/M.ouAvg):1;
+  const g=F.toi*F.r.g*fS*fG, a=F.toi*F.r.a*fS*fG;
+  return {sog:F.toi*F.r.sog*fS*cx('sog'), goal:g*cx('goal'), pts:(g+a)*cx('pts')};
+}
+const squeeze=(p,b)=>b===1?p:expit(b*logit(clamp(p,0.005,0.995)));
+const slopeOf=s=>(M.calib||[]).includes(s)&&M.slope&&M.slope[s]?M.slope[s]:1;
+// P(over) / P(under) at a line; a whole-number line can push
+function propSides(mu, s, L){
+  if(!(mu>0)||!(L>=0)) return null; const r=M.r[s], b=slopeOf(s), cl=v=>clamp(v,0.01,0.99);
+  if(Number.isInteger(L)){ const o=pOver(mu,r,L), u=1-pOver(mu,r,L-0.5), t=o+u; if(!(t>0)) return null; const po=squeeze(cl(o/t),b); return {over:po, under:1-po}; }
+  const o=squeeze(cl(pOver(mu,r,L)),b); return {over:o, under:1-o};
+}
+
+// ---------------------------------------------------------------- slate, injuries, statuses, goalies
+const SB='https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/scoreboard', SUM='https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/summary?event=';
+const teamById=Object.fromEntries(S.teamList.map(a=>[String(S.teams[a].id), a]));
+const ymd=d=>d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
+let SLATE=[], SLATE_DAY=null, CUR=null, STAT='sog', INJ=new Map();
+let STATUS=lsJ('nhlp_status', {});   // {day: {key: 'ACT'|'Q'|'OUT', 'G|game|team': goalieId}} — your own calls, kept for that day only
+function evToGame(e){ const c=e.competitions&&e.competitions[0]; if(!c) return null; const side={}, prob={};
+  for(const x of (c.competitors||[])){ const ab=teamById[String(x.team&&x.team.id)]; if(!ab) continue; side[x.homeAway]={ab}; const pg=(x.probables||[]).find(p=>/goalie/i.test(p.name||''))||(x.probables||[])[0]; if(pg&&(pg.playerId||pg.athlete)) prob[ab]=String(pg.playerId||pg.athlete.id); }
+  if(!side.home||!side.away) return null;
+  const o=(c.odds||[])[0]||{}, ou=o.overUnder!=null&&+o.overUnder>=4?+o.overUnder:null;
+  return {id:String(e.id), game:side.away.ab+'@'+side.home.ab, away:side.away.ab, home:side.home.ab, tip:e.date, ou, line:o.details||'', prob, final:!!(e.status&&e.status.type&&e.status.type.completed), state:(e.status&&e.status.type&&e.status.type.state)||'pre'}; }
+// tonight = today's regular-season games; once they're all final (or there are none), the next day that has some
+async function loadSlate(){
+  for(let i=0;i<10;i++){ const d=new Date(Date.now()+i*864e5);
+    let j; try{ j=await (await fetch(`${SB}?dates=${ymd(d)}`,{cache:'no-store'})).json(); }catch(e){ break; }
+    const games=(j.events||[]).filter(e=>e.season&&e.season.type>=2).map(evToGame).filter(Boolean);
+    if(games.some(g=>!g.final)){ SLATE=games.sort((a,b)=>Date.parse(a.tip)-Date.parse(b.tip)); SLATE_DAY=ymd(d); break; } }
+  if(!CUR||!SLATE.some(g=>g.game===CUR)) CUR=(SLATE.find(g=>g.state==='pre')||SLATE[0]||{}).game||null;
+  for(const k of Object.keys(STATUS)) if(k!==SLATE_DAY) delete STATUS[k];
+  renderAll();
+}
+async function loadInjuries(){ try{ const j=await (await fetch('https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/injuries')).json(); const m=new Map();
+    for(const tm of (j.injuries||[])) for(const it of (tm.injuries||[])){ const A=it.athlete||{}, id=(((A.links||[]).map(l=>l.href).join(' ').match(/\/id\/(\d+)/)||[])[1])||A.id; if(!id) continue;   // the injury feed's own id is not the player's — his link has it
+      const st=String(it.status||'').toLowerCase(); m.set(String(id), /out|suspen|injured reserve|\bir\b/.test(st)?'OUT':/day/.test(st)?'Q':'Q'); }
+    INJ=m; renderAll(); }catch(e){} }
+const statusOf=key=>((STATUS[SLATE_DAY]||{})[key]) || INJ.get(key.split('|')[1]) || 'ACT';
+const gameOf=id=>SLATE.find(g=>g.game===id)||null;
+const goaliesOf=abbr=>(S.rosters[abbr]||[]).filter(p=>p.kind===2);
+// tonight's goalie for a team: your pick, else ESPN's probable starter, else the one who has started most of the last 10
+function goalieFor(g, abbr){ const mine=(STATUS[SLATE_DAY]||{})['G|'+g.game+'|'+abbr], G=goaliesOf(abbr);
+  const id=mine||(g.prob&&g.prob[abbr])||((G.slice().sort((a,b)=>(b.rs-a.rs)||(b.gs-a.gs))[0])||{}).id;
+  return G.find(x=>x.id===String(id))||null; }
+
+// every rostered skater of a team tonight, with his projection for each stat
+function teamProj(abbr, g){
+  const opp=g?(g.home===abbr?g.away:g.home):null, D=opp?S.defense[opp]:null, gl=opp&&g?goalieFor(g, opp):null;
+  const rows=(S.rosters[abbr]||[]).filter(p=>p.kind!==2&&p.g>0&&p.r).map(p=>({p, key:abbr+'|'+p.id, abbr, st:statusOf(abbr+'|'+p.id), thin:p.g<(M.minGames||5)}));
+  for(const r of rows){ r.mu=project(r.p, D, gl?gl.sv:null, g?g.ou:null); r.vs=gl; }
+  return rows;
+}
+const PROJ=new Map();
+function projFor(g){ const m=new Map(); for(const ab of [g.away,g.home]) for(const r of teamProj(ab,g)) m.set(r.key, r); return m; }
+
+// ---------------------------------------------------------------- bankroll (dollars; grows with settled bets)
+let bets=lsJ('nhlp_bets', []);
+let BANK=Object.assign({amt:null, at:0}, lsJ('nhlp_bank', {}));
+const UNITS=100;   // 1 unit = 1% of the bankroll
+const betUsd=b=>b.usd!=null?+b.usd:(BANK.amt?(+b.stake||0)*BANK.amt/UNITS:null);
+const betPl=b=>{ const d=oddsDec(b.odds)||1, u=BANK.amt?betUsd(b):(+b.stake||0); return b.result==='win'?u*(d-1):b.result==='loss'?-u:b.result==='push'?0:null; };
+function bankNow(){ if(!BANK.amt) return null; let x=BANK.amt; for(const b of bets) if(b.st>BANK.at){ const p=betPl(b); if(p!=null) x+=p; } return Math.max(0,x); }
+const unitUsd=()=>{ const n=bankNow(); return n!=null?n/UNITS:null; };
+const fmtUsd=x=>{ const a=Math.abs(x); return (x<0?'−':'')+'$'+(a>=20?Math.round(a).toLocaleString():a>=1?(Math.round(a*2)/2).toFixed(Math.round(a*2)%2?2:0):a.toFixed(2)); };
+const stakeTxt=u=>{ const k=unitUsd(); return k!=null?fmtUsd(u*k):(Math.round(u*10)/10).toFixed(1)+'u'; };
+const betStakeTxt=b=>BANK.amt&&betUsd(b)!=null?fmtUsd(betUsd(b)):b.stake+'u';
+function renderBank(){ const inp=$('bankUsd'), now=bankNow(); if(document.activeElement!==inp) inp.value=now!=null?Math.round(now*100)/100:'';
+  if(now==null){ $('bankNow').textContent=''; $('bankNote').textContent='Type what\'s in your betting account and every stake turns into dollars. It then grows or shrinks by itself as bets settle.'; return; }
+  const done=bets.filter(b=>b.st>BANK.at&&betPl(b)!=null), d=now-BANK.amt, open=bets.filter(b=>b.result==='pending'), risk=open.reduce((a,b)=>a+(betUsd(b)||0),0);
+  $('bankNow').innerHTML=done.length?`<b class="${d>0?'ev-pos':d<0?'ev-neg':''}">${d>=0?'+':''}${fmtUsd(d)}</b> <span class="muted">from ${done.length} settled bet${done.length>1?'s':''}</span>`:'';
+  $('bankNote').innerHTML=`1 unit = 1% = <b>${fmtUsd(unitUsd())}</b>.${open.length?` <b>${fmtUsd(risk)}</b> riding on ${open.length} open bet${open.length>1?'s':''}.`:''} Deposited or withdrew? Type the new balance.`; }
+function saveBets(){ lsW('nhlp_bets', bets); renderAll(); }
+
+// ---------------------------------------------------------------- odds: your books, tickets, links, the other books
+const ODDS_API='https://api.the-odds-api.com/v4/sports/icehockey_nhl';
+const OA={player_shots_on_goal:'sog', player_goal_scorer_anytime:'goal', player_goals:'goal', player_points:'pts'};
+const DEFAULT_MK={player_shots_on_goal:true, player_goal_scorer_anytime:true, player_points:true, player_goals:false};
+let CFG=Object.assign({books:['fanduel','draftkings'], mk:null, reserve:300, state:''}, lsJ('nhlp_oddscfg', {}));
+const BOOK_CHOICES=['fanduel','draftkings','betmgm','williamhill_us','fanatics'];
+const BOOK_NAMES={fanduel:'FanDuel', draftkings:'DraftKings', betmgm:'BetMGM', williamhill_us:'Caesars', betrivers:'BetRivers', fanatics:'Fanatics'}, BOOK_TAGS={fanduel:'FD', draftkings:'DK', betmgm:'MGM', williamhill_us:'CZR', betrivers:'BR', fanatics:'FAN'};
+const bookName=b=>BOOK_NAMES[b]||b||'', bookTag=b=>BOOK_TAGS[b]||String(b||'').slice(0,3).toUpperCase();
+const myBooks=()=>['fanduel'].concat((CFG.books||[]).filter(x=>x!=='fanduel'&&BOOK_CHOICES.includes(x)));
+const mkOn=k=>CFG.mk&&CFG.mk[k]!=null?!!CFG.mk[k]:!!DEFAULT_MK[k], pickedMarkets=()=>Object.keys(OA).filter(mkOn);
+const oaOf=s=>pickedMarkets().filter(k=>OA[k]===s).concat(Object.keys(OA).filter(k=>OA[k]===s)).slice(0,1)[0];
+const bkBadge=b=>b?`<span class="bktag" title="${esc(bookName(b))} — the best price among your books">${bookTag(b)}</span>`:'';
+const oddsKey=()=>{ try{ return localStorage.getItem('nhlp_oddskey')||localStorage.getItem('nfltd_oddskey')||localStorage.getItem('nbap_oddskey')||''; }catch(e){ return ''; } };   // shares the NFL app's key on the same site
+let oddsLeft=lsJ('nhlp_oddsleft', null), oddsEvents=null;
+let BOARDS=(b=>{ const old=Date.now()-3*864e5; for(const k of Object.keys(b)) if(!(b[k].t>old)) delete b[k]; return b; })(lsJ('nhlp_boards', {}));   // game -> {t, offers, cons, yes, mine}
+const oddsFail=(status,code)=>Object.assign(new Error('odds '+status),{status,code});
+const oddsWhy=e=>{ const s=e&&e.status; return s==='nokey'?'add your The Odds API key under odds settings':s==='noevent'?'not on The Odds API\'s board yet':s==='started'?'already started':s===401?'key rejected':(s===429||s===422)?'out of credits':'couldn\'t reach The Odds API'; };
+function oddsStatus(){ $('oddsLeft').textContent=oddsLeft!=null?`${oddsLeft} credits left`:''; }
+async function apiGet(url){ const r=await fetch(url); const rem=r.headers.get('x-requests-remaining'); if(rem!=null){ oddsLeft=+rem; lsW('nhlp_oddsleft', oddsLeft); }
+  const j=await r.json().catch(()=>({})); if(!r.ok) throw oddsFail(r.status, j.error_code); return j; }
+async function eventsList(){ const key=oddsKey(); if(!key) throw oddsFail('nokey'); if(oddsEvents&&Date.now()-oddsEvents.t<10*60e3) return oddsEvents.list;
+  const list=await apiGet(`${ODDS_API}/events?apiKey=${encodeURIComponent(key)}`); oddsEvents={t:Date.now(), list}; return list; }   // free
+const nick=n=>normName(String(n||'').split(' ').pop());
+const abbrByName=name=>S.teamList.find(a=>normName(S.teams[a].name)===normName(name)) || S.teamList.find(a=>nick(S.teams[a].name)===nick(name)) || null;
+// a bet-slip ticket for one outcome: FanDuel market+selection, BetMGM's "<event>-<market>-<option>", else the outcome id
+const tkOf=(b,o)=>{ const t={b, o:fmtAm(o.price)}; if(b==='fanduel'){ const m=o.link&&/marketId[^=]*=([^&]+)/.exec(o.link); if(m&&o.sid){ t.m=decodeURIComponent(m[1]); t.s=String(o.sid); } } else if(o.sid) t.s=String(o.sid);
+  if(b==='betmgm'){ const g=/[?&]options=([^&]+)/.exec(o.link||''); if(g) t.g=decodeURIComponent(g[1]); } return t; };
+const FD_SLIP='https://sportsbook.fanduel.com/addToBetslip', BOOK_HOME={fanatics:'https://sportsbook.fanatics.com/'};
+function bookLink(book, tks){ if(!tks.length) return null; const st=String(CFG.state||'').toLowerCase();
+  if(book==='fanduel'){ if(tks.some(x=>!x.m||!x.s)) return null; return tks.length===1?`${FD_SLIP}?marketId=${encodeURIComponent(tks[0].m)}&selectionId=${encodeURIComponent(tks[0].s)}`:FD_SLIP+'?'+tks.map((x,i)=>`marketId[${i}]=${encodeURIComponent(x.m)}&selectionId[${i}]=${encodeURIComponent(x.s)}`).join('&'); }
+  if(book==='draftkings'){ if(tks.some(x=>!x.s)) return null; return 'https://sportsbook.draftkings.com/?outcomes='+tks.map(x=>encodeURIComponent(x.s)).join('+'); }
+  if(book==='betmgm'){ if(!st||tks.some(x=>!x.g)) return null; return `https://sports.${st}.betmgm.com/en/sports?options=${tks.map(x=>x.g).join(',')}&type=Single`; }
+  if(book==='williamhill_us'){ if(!st||tks.some(x=>!x.s)) return null; return `https://sportsbook.caesars.com/us/${st}/bet/betslip?selectionIds=${tks.map(x=>encodeURIComponent(x.s)).join(',')}`; }
+  return null; }
+// buttons that open these picks in their book's bet slip (one per book); Fanatics has no slip link — open it and find the bet
+function linkButtons(picks, label){ const by=new Map(), home=new Map(); let miss=0, noState=new Set();
+  for(const c of picks){ const t=c.tk; if(t&&bookLink(t.b,[t])) (by.get(t.b)||by.set(t.b,[]).get(t.b)).push(t); else if(t&&BOOK_HOME[t.b]) (home.get(t.b)||home.set(t.b,[]).get(t.b)).push(c.name); else if(t&&(t.b==='betmgm'||t.b==='williamhill_us')&&!CFG.state) noState.add(bookName(t.b)); else miss++; }
+  let h=''; for(const [b,tks] of by) h+=`<a class="ss" href="${esc(bookLink(b,tks))}" target="_blank" rel="noopener" title="opens ${esc(bookName(b))} with ${tks.length===1?'this bet':'these '+tks.length+' bets'} in the bet slip — check the price there">📲 ${label} ${esc(bookName(b))}${by.size>1?' ('+tks.length+')':''}</a> `;
+  for(const [b,nm] of home) h+=`<a class="ss" href="${BOOK_HOME[b]}" target="_blank" rel="noopener" title="${esc(bookName(b))} gives no bet-slip link — find the bet there">🔎 ${esc(bookName(b))}: find ${esc(nm.join(', '))}</a> `;
+  if(noState.size) h+=`<button class="ss statepick">📍 Pick your state for ${esc([...noState].join(' / '))} links</button> `;
+  return h+(miss?`<span class="muted" style="font-size:12px">+ ${miss} not linked</span>`:''); }
+function matchPlayer(name, players){ const n=normName(name); let p=players.find(x=>x.nn===n); if(p) return p;
+  const t=String(name).replace(/\b(Jr|Sr|II|III|IV)\b\.?/g,'').trim().split(/\s+/), last=normName(t[t.length-1]), fi=normName(t[0]).slice(0,1), c=players.filter(x=>x.last===last&&x.fi===fi); return c.length===1?c[0]:null; }
+function gamePlayers(g){ const out=[]; for(const ab of [g.away,g.home]) for(const p of (S.rosters[ab]||[])){ if(p.kind===2) continue; const t=p.name.replace(/\b(Jr|Sr|II|III|IV)\b\.?/g,'').trim().split(/\s+/); out.push({key:ab+'|'+p.id, abbr:ab, name:p.name, nn:normName(p.name), last:normName(t[t.length-1]), fi:normName(t[0]).slice(0,1)}); } return out; }
+// an event-odds body -> this game's board:
+//   offers[stat|key] = [{line, O:{o,tk}, U?:{o,tk}, book?}]  first = the box's line with your best price per side; anytime goal
+//                      is a yes-only price (O at 0.5, no U)
+//   cons[stat|key]   = {line: the OTHER books' median de-vigged P(over)} (two-way markets)
+//   yes[goal|key]    = the other books' median implied P(anytime goal) — a yes-only price still carries the cut
+//   mine[stat|key]   = {book: [{line, O, U}]}  each of your books' own lines (for closing prices)
+function parseBoard(j, g){
+  const mine=myBooks(), players=gamePlayers(g), board={t:Date.now(), offers:{}, cons:{}, yes:{}, mine:{}, n:0, miss:[]}, raw={}, consRaw={}, yesRaw={};
+  for(const bk of (j.bookmakers||[])) for(const m of (bk.markets||[])){ const s=OA[m.key]; if(!s) continue; const isMine=mine.includes(bk.key), pairs={}, yesOnly=m.key==='player_goal_scorer_anytime';
+    for(const o of (m.outcomes||[])){ if(!o.description) continue;
+      if(yesOnly){ if(o.name!=='Yes'&&o.name!=='No') continue; const k=o.description+'|0.5'; (pairs[k]=pairs[k]||{name:o.description, line:0.5})[o.name==='Yes'?'O':'U']=o; continue; }
+      if(o.point==null||(o.name!=='Over'&&o.name!=='Under')) continue; const k=o.description+'|'+o.point; (pairs[k]=pairs[k]||{name:o.description, line:+o.point})[o.name==='Over'?'O':'U']=o; }
+    for(const q of Object.values(pairs)){ if(!q.O) continue; const p=matchPlayer(q.name, players); if(!p){ if(isMine&&!board.miss.includes(q.name)) board.miss.push(q.name); continue; } const key=s+'|'+p.key;
+      if(isMine){ ((raw[key]=raw[key]||{})[bk.key]=raw[key][bk.key]||[]).push({line:q.line, O:{o:fmtAm(q.O.price), p:q.O.price, tk:tkOf(bk.key,q.O)}, U:q.U?{o:fmtAm(q.U.price), p:q.U.price, tk:tkOf(bk.key,q.U)}:null}); }
+      else if(q.U){ const io=americanToProb(q.O.price), iu=americanToProb(q.U.price); ((consRaw[key]=consRaw[key]||{})[q.line]=consRaw[key][q.line]||[]).push(io/(io+iu)); }
+      else if(yesOnly) (yesRaw[key]=yesRaw[key]||[]).push(americanToProb(q.O.price)); } }
+  for(const [key,o] of Object.entries(consRaw)){ board.cons[key]={}; for(const [l,xs] of Object.entries(o)) board.cons[key][l]=median(xs); }
+  for(const [key,xs] of Object.entries(yesRaw)) board.yes[key]=median(xs);
+  for(const [key,byBook] of Object.entries(raw)){
+    board.mine[key]=Object.fromEntries(Object.entries(byBook).map(([b,arr])=>[b, arr.map(x=>({line:x.line, O:x.O.o, U:x.U?x.U.o:null}))]));
+    const bal=x=>x.U?Math.abs(americanToProb(x.O.p)-americanToProb(x.U.p)):1;   // a book's main line = its most balanced over/under
+    const mainOf=b=>{ const A=byBook[b]; if(!A) return null; return A.slice().sort((x,y)=>bal(x)-bal(y))[0]; };
+    const mains=mine.map(b=>[b,mainOf(b)]).filter(x=>x[1]); if(!mains.length) continue; const P=mains[0][1], offers=[];
+    const best=sd=>{ const offs=mains.filter(([,m])=>m.line===P.line&&m[sd]).map(([,m])=>m[sd]).sort((x,y)=>(y.p-x.p)||(mine.indexOf(x.tk.b)-mine.indexOf(y.tk.b))); return offs.length?{o:offs[0].o, tk:offs[0].tk}:null; };
+    offers.push({line:P.line, O:best('O'), U:best('U')}); board.n+=1+(P.U?1:0);
+    for(const [b,m] of mains) if(m.line!==P.line){ offers.push({line:m.line, book:b, O:{o:m.O.o, tk:m.O.tk}, U:m.U?{o:m.U.o, tk:m.U.tk}:null}); board.n+=1+(m.U?1:0); }
+    board.offers[key]=offers; }
+  return board;
+}
+async function pullGame(g, markets){
+  const key=oddsKey(); if(!key) throw oddsFail('nokey');
+  const ev=(await eventsList()).find(e=>abbrByName(e.away_team)===g.away&&abbrByName(e.home_team)===g.home); if(!ev) throw oddsFail('noevent');
+  if(Date.parse(ev.commence_time)<=Date.now()) throw oddsFail('started');
+  const j=await apiGet(`${ODDS_API}/events/${ev.id}/odds?apiKey=${encodeURIComponent(key)}&regions=us&markets=${(markets||pickedMarkets()).join(',')}&oddsFormat=american&includeLinks=true&includeSids=true`);
+  return parseBoard(j, g);
+}
+// a pull updates the game's board, and every open bet on it: its book's current price at the bet's own line (live CLV)
+function applyBoard(g, board, partial){
+  if(partial&&BOARDS[g.game]){ const B=BOARDS[g.game]; for(const f of ['offers','cons','yes','mine']) Object.assign(B[f]=B[f]||{}, board[f]); B.t=Date.now(); } else BOARDS[g.game]=board;
+  for(const b of bets){ if(b.result!=='pending'||b.game!==g.game||!b.key) continue; const st=b.market.split('|')[1]; if(!Object.keys(board.mine).some(k=>k.startsWith(st+'|'))) continue;
+    const v=closeView(b, board); if(v&&v.odds){ b.cur={q:v.odds, l:v.line, o:v.raw, t:Date.now()}; delete b.offBoard; } else if(!v){ b.offBoard='no longer offered'; delete b.cur; } }
+  lsW('nhlp_boards', BOARDS); lsW('nhlp_bets', bets);
+}
+// the book's price for a logged bet at ITS line: exact, or the nearest line translated with the model's distribution
+function closeView(b, board){ const [,s,side,l]=b.market.split('|'), arr=((board.mine||{})[s+'|'+b.key]||{})[b.book||'fanduel']; if(!arr||!arr.length) return null;
+  const o=arr.slice().sort((x,y)=>Math.abs(x.line-l)-Math.abs(y.line-l))[0], raw=side==='O'?o.O:o.U; if(!raw) return null; if(o.line===+l) return {odds:raw, line:o.line, raw, est:false};
+  const a=b.pmu>0?propSides(b.pmu,s,+l):null, c=b.pmu>0?propSides(b.pmu,s,o.line):null, at=x=>side==='O'?x.over:x.under;
+  return {odds:a&&c?probToAmerican(clamp(americanToProb(parseFloat(raw))+at(a)-at(c),0.02,0.98)):null, line:o.line, raw, est:true}; }
+async function pullAll(only){
+  const msg=$('pullMsg'), games=SLATE.filter(g=>g.state==='pre'&&(!only||g.game===only)), mk=pickedMarkets();
+  if(!oddsKey()){ msg.innerHTML=oddsWhy({status:'nokey'}); $('oddsCfg').open=true; return; }
+  if(!games.length){ msg.textContent='no games left to start tonight'; return; } if(!mk.length){ msg.textContent='tick at least one market under odds settings'; return; }
+  const cost=games.length*mk.length;
+  if(oddsLeft!=null&&oddsLeft-cost<CFG.reserve&&!confirm(`This pull uses about ${cost} credits (${games.length} game${games.length>1?'s':''} × ${mk.length} markets). You have ${oddsLeft} left and your reserve is ${CFG.reserve}. Go ahead?`)) return;
+  $('pullAll').disabled=true; let n=0; const notes=[];
+  for(const g of games){ msg.textContent=`pulling ${fmtGame(g.game)}…`; try{ const b=await pullGame(g); applyBoard(g, b); n+=b.n; }catch(e){ notes.push(`${fmtGame(g.game)}: ${oddsWhy(e)}`); if(e.status===401||e.status===429||e.status==='nokey') break; } }
+  $('pullAll').disabled=false; oddsStatus();
+  msg.innerHTML=`⚡ ${myBooks().map(bookName).join(' + ')} · <b>${n}</b> prices · ${new Date().toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}`+(notes.length?` · <span style="color:var(--warn)" title="${esc(notes.join(' · '))}">${notes.length} skipped</span>`:'');
+  renderAll();
+}
+
+// ---------------------------------------------------------------- candidates: every priced side, judged against the market
+const PROP_W=S.marketAnchor&&S.marketAnchor.props&&S.marketAnchor.props.w!=null?S.marketAnchor.props.w:0.1;   // shots / points: the model's share (NFL-tested value; not NHL-tested)
+const GOAL_W=0;   // anytime goal: the market alone — the NFL test found the books beat the model on anytime TDs
+const MODEL_CAP=0.03;
+const blendP=(mkt,model,w)=>w?clamp(expit((1-w)*logit(clamp(mkt,0.003,0.995))+w*logit(clamp(model,0.003,0.995))), mkt-MODEL_CAP, mkt+MODEL_CAP):mkt;
+function consAt(board, key, s, line, mu){ const o=board.cons[key]; if(!o) return null; if(o[line]!=null) return o[line];
+  const tol=Math.max(1, 0.12*line); let best=null; for(const k of Object.keys(o)){ const L2=+k; if(Math.abs(L2-line)<=tol&&(best==null||Math.abs(L2-line)<Math.abs(best-line))) best=L2; }
+  if(best==null) return null; const a=propSides(mu,s,line), b=propSides(mu,s,best); return a&&b?clamp(o[best]+a.over-b.over,0.02,0.98):null; }
+// yes-only anytime prices still carry the book's cut, so they're scaled to the model's expected number of scorers in this
+// game (the market says WHO, the model says HOW MANY) — the NFL app's rule for first / last TD prices
+function yesScale(board, proj){ let sm=0, si=0, n=0; for(const [k,ip] of Object.entries(board.yes||{})){ const r=proj.get(k.slice(5)); if(!r||!(ip>0)) continue; sm+=1-Math.exp(-r.mu.goal); si+=ip; n++; }
+  return n>=6&&si>0?sm/si:null; }
+function confOf(r, src){ const parts=[]; let c=1; const f=(x,why)=>{ c*=x; parts.push(why); };
+  const g=r.p.g||0; if(g<25) f(clamp(0.55+0.45*g/25,0.55,1), `${Math.round(g)} games of history`);
+  if((r.p.gc||0)<5) f(0.9, 'early season — leaning on last year');
+  if(r.st==='Q') f(0.75, 'day-to-day / questionable'); if(src==='own') f(0.85, 'no other book prices this line');
+  return {score:c, label:c>=0.8?'High':c>=0.6?'Medium':'Low', parts}; }
+const confBadge=c=>`<span class="conf ${c.score>=0.8?'hi':c.score>=0.6?'md':'lo'}" title="${esc(c.parts.length?c.parts.join(' · '):'full history, healthy, other books price it')}">${c.label} ${Math.round(c.score*100)}</span>`;
+let CANDS=[], CARD=[];
+function buildCands(){
+  const out=[]; PROJ.clear();
+  for(const g of SLATE){ const board=BOARDS[g.game]; const proj=projFor(g); PROJ.set(g.game, proj); if(!board||g.state!=='pre') continue;
+    const ks=yesScale(board, proj);
+    for(const [k,offers] of Object.entries(board.offers)){ const i=k.indexOf('|'), s=k.slice(0,i), key=k.slice(i+1), r=proj.get(key); if(!r||r.thin||r.st==='OUT'||!M.stats[s]) continue; const mu=r.mu[s];
+      for(const off of offers){ const ps=propSides(mu,s,off.line); if(!ps) continue;
+        let mo=consAt(board,k,s,off.line,mu), src=mo!=null?'books':null;
+        if(mo==null&&s==='goal'&&off.line===0.5&&board.yes[k]>0&&ks){ mo=clamp(board.yes[k]*ks,0.005,0.95); src='books'; }
+        if(mo==null&&off.O&&off.U){ const io=americanToProb(parseFloat(off.O.o)), iu=americanToProb(parseFloat(off.U.o)); if(io>0&&iu>0){ mo=io/(io+iu); src='own'; } }
+        for(const sd of ['O','U']){ const o=off[sd]; if(!o) continue; const dec=oddsDec(o.o); if(!dec) continue; const model=sd==='O'?ps.over:ps.under, mkt=mo!=null?(sd==='O'?mo:1-mo):null;
+          const mp=mkt!=null?blendP(mkt,model,s==='goal'?GOAL_W:PROP_W):model, bimp=1/dec, ev=mp*dec-1, edge=mp-bimp, conf=confOf(r,src);
+          const tier=mkt==null?'model':mp<0.06?'dart':(edge>0.12||ev>1)?'flag':(ev>=0.03&&edge>=0.015)?'take':'pass';   // the NFL app's guards: under 6% is too rare to price; a huge gap is usually news or a stale price
+          out.push({game:g.game, evId:g.id, tip:g.tip, key, name:r.p.name, abbr:r.abbr, pos:r.p.pos, stat:s, side:sd, line:off.line, market:mktKey(s,sd,off.line), odds:o.o, book:o.tk.b, tk:o.tk,
+            mu, model, mkt, src, mp, bimp, ev, edge, conf, kelly:edge>0?conf.score*edge/(1-bimp):0, tier}); } } } }
+  // the same side at two of your books (different lines) is one bet: keep the logged one, else the higher EV
+  const mineLog=new Set(bets.filter(b=>b.result==='pending').map(b=>b.game+'|'+b.key+'|'+b.market)), best=new Map(), gk=c=>c.game+'|'+c.key+'|'+c.stat+'|'+c.side;
+  const beats=(a,b)=>{ const la=mineLog.has(a.game+'|'+a.key+'|'+a.market), lb=mineLog.has(b.game+'|'+b.key+'|'+b.market); return la!==lb?la:a.ev>b.ev; };
+  for(const c of out) if(!best.has(gk(c))||beats(c,best.get(gk(c)))) best.set(gk(c), c);
+  for(const c of out){ const b=best.get(gk(c)); if(b!==c){ c.dup=true; b.also=(b.also||[]).concat({book:c.book, line:c.line, odds:c.odds}); } }
+  CANDS=out;
+}
+// tonight's card: best bets across every pulled game — ¼ Kelly on the confidence-adjusted edge, one per player,
+// at most 2 per team and 3 per game, a night capped at 12% of bankroll
+const MAX_TEAM=2, MAX_GAME=3, NIGHT_CAP=12, BET_CAP=3;
+function buildCard(){
+  const n=+$('cardN').value||5, held=new Set(bets.filter(b=>b.result==='pending').map(b=>b.game+'|'+b.key)), picks=[], perT={}, perG={}, seen=new Set();
+  for(const c of CANDS.filter(c=>c.tier==='take'&&!c.dup).sort((a,b)=>b.kelly-a.kelly)){ if(picks.length>=n) break; const pk=c.game+'|'+c.key;
+    if(seen.has(pk)||(perT[c.game+c.abbr]||0)>=MAX_TEAM||(perG[c.game]||0)>=MAX_GAME) continue;
+    seen.add(pk); perT[c.game+c.abbr]=(perT[c.game+c.abbr]||0)+1; perG[c.game]=(perG[c.game]||0)+1;
+    picks.push(Object.assign({}, c, {stake:Math.max(0.1, Math.min(BET_CAP, Math.round(0.25*c.kelly*UNITS*10)/10)), held:held.has(pk)})); }
+  const tot=picks.reduce((a,c)=>a+c.stake,0); if(tot>NIGHT_CAP) picks.forEach(c=>{ c.stake=Math.max(0.1, Math.floor(c.stake*NIGHT_CAP/tot*10)/10); });
+  CARD=picks;
+}
+function logBet(c, stake){ if(bets.some(b=>b.result==='pending'&&b.game===c.game&&b.key===c.key&&b.market===c.market)) return false; const k=unitUsd();
+  bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*1e6), ts:new Date().toISOString(), ko:c.tip, ev:c.evId, game:c.game, key:c.key, player:c.name, market:c.market, odds:c.odds, book:c.book,
+    modelProb:+c.mp.toFixed(4), rawP:+c.model.toFixed(4), ...(c.mkt!=null?{mktP:+c.mkt.toFixed(4)}:{}), pmu:+c.mu.toFixed(3), stake:+(+stake).toFixed(1), ...(k!=null?{usd:+(stake*k).toFixed(2)}:{}), closeOdds:'', result:'pending'});
+  return true; }
+
+// ---------------------------------------------------------------- rendering
+function renderSlate(){
+  const d=SLATE_DAY?new Date(+SLATE_DAY.slice(0,4), +SLATE_DAY.slice(4,6)-1, +SLATE_DAY.slice(6,8)):null;
+  $('slateLbl').textContent=d?d.toLocaleDateString([], {weekday:'long', month:'short', day:'numeric'})+` · ${SLATE.length} game${SLATE.length===1?'':'s'}`:'';
+  $('builtLbl').textContent='data '+new Date(S.builtAt).toLocaleDateString([], {month:'short', day:'numeric'});
+  if(!SLATE.length){ $('slateChips').innerHTML='<span class="muted">No regular-season games in the next 10 days.</span>'; return; }
+  $('slateChips').innerHTML=SLATE.map(g=>{ const b=BOARDS[g.game], age=b?Math.round((Date.now()-b.t)/60e3):null;
+    return `<div class="chip${g.game===CUR?' on':''}" data-g="${esc(g.game)}"><b>${esc(g.away)} @ ${esc(g.home)}</b> <button class="ss pullone" data-g="${esc(g.game)}" title="pull this game's prices (${pickedMarkets().length} credits)" ${g.state!=='pre'?'disabled':''} style="padding:0 6px;margin-left:4px">⚡</button>`+
+      `<small>${g.final?'final':g.state==='in'?'in progress':new Date(g.tip).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}${g.ou?' · O/U '+g.ou:''}${g.line?' · '+esc(g.line):''}${age!=null?` · priced ${age<60?age+'m':Math.round(age/60)+'h'} ago`:''}</small></div>`; }).join('');
+  const days=SLATE_DAY&&ymd(new Date())!==SLATE_DAY;
+  $('slateNote').innerHTML=(days?'No games today — showing the next slate. ':'')+'Pick a game to see both teams. Pick each team\'s goalie and set scratched skaters to OUT. ⚡ on a game pulls just that game.';
+}
+function renderGame(){
+  const g=gameOf(CUR), body=$('gameBody'); $('statTabs').innerHTML=STATS.map(s=>`<button class="tab${s===STAT?' on':''}" data-s="${s}">${SHORT[s]}</button>`).join('');
+  if(!g){ $('gameHdr').textContent='Players'; body.innerHTML='<div class="muted">No game selected.</div>'; return; }
+  $('gameHdr').textContent=`${fmtGame(g.game)} — ${SHORT[STAT]}`;
+  const proj=PROJ.get(g.game)||projFor(g), board=BOARDS[g.game], s=STAT, yes=s==='goal';
+  const col=ab=>{ const rows=[...proj.values()].filter(r=>r.abbr===ab).sort((a,b)=>(a.thin-b.thin)||((b.p.toi||0)-(a.p.toi||0))).filter(r=>r.p.toi>=8||r.st==='OUT').slice(0,20);
+    const gl=goalieFor(g, ab), G=goaliesOf(ab), prob=g.prob&&g.prob[ab];
+    const gsel=`<select class="gsel" data-g="${esc(g.game)}" data-t="${esc(ab)}" title="tonight's goalie — it moves the other team's goal and point numbers">${G.map(x=>`<option value="${esc(x.id)}"${gl&&gl.id===x.id?' selected':''}>${esc(x.name)} · ${(x.sv*100).toFixed(1)}%${x.id===prob?' (ESPN probable)':''}</option>`).join('')}</select>`;
+    return `<div style="min-width:0"><div style="font-weight:800;margin:4px 0 6px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span><span class="tm" style="background:${teamColor(ab)}"></span>${esc(S.teams[ab].name)}</span><span class="muted" style="font-weight:400;font-size:12px">🥅 ${G.length?gsel:'—'}</span></div><div class="scroll"><table class="gt"><thead><tr><th class="l">Player</th><th>TOI</th><th>Proj</th><th class="hide900">Avg</th><th>Line</th><th>${yes?'Yes':'Over'}</th><th>${yes?'No':'Under'}</th></tr></thead><tbody>`+
+      rows.map(r=>{ const off=board&&(board.offers[s+'|'+r.key]||[])[0], cs=k=>CANDS.find(c=>c.game===g.game&&c.key===r.key&&c.stat===s&&c.side===k&&off&&c.line===off.line);
+        const cell=k=>{ const c=cs(k); if(!c) return '<td class="muted">—</td>'; const cls=c.tier==='take'?'ev-pos':c.tier==='flag'?'':'ev-neg';
+          return `<td class="px" title="${esc(`${bookName(c.book)} ${c.odds} · chance ${pct(c.mp)}${c.mkt!=null?` (${c.src==='own'?'the book\'s own price':'other books'} ${pct(c.mkt)}, model ${pct(c.model)})`:' (model only)'} · EV ${(c.ev*100).toFixed(1)}%`)}"><span class="odds">${esc(c.odds)}</span>${bkBadge(c.book)}<small class="${cls}">${c.ev>=0?'+':''}${(c.ev*100).toFixed(0)}%</small></td>`; };
+        const avg=s==='goal'?r.p.avg.g:r.p.avg[s], projTxt=s==='goal'?pct(1-Math.exp(-r.mu.goal)):r.mu[s].toFixed(2), avgTxt=s==='goal'?avg.toFixed(2)+'/g':avg.toFixed(2);
+        return `<tr${r.st==='OUT'||r.thin?' style="opacity:.45"':''}${r.thin?` title="only ${r.p.g} game${r.p.g===1?'':'s'} of NHL history — shown for reference, never bet"`:''}><td class="l"><b>${esc(r.p.name)}</b> <span class="muted" style="font-size:11px">${esc(r.p.pos)}${r.thin?' · new':''}</span> <select class="stsel" data-key="${esc(r.key)}">${['ACT','Q','OUT'].map(x=>`<option${x===r.st?' selected':''}>${x}</option>`).join('')}</select></td>`+
+          `<td>${r.st==='OUT'?'—':r.p.toi.toFixed(1)}</td><td title="${s==='goal'?'chance he scores, from the simulator':'expected '+SHORT[s].toLowerCase()}"><b>${r.st==='OUT'?'—':projTxt}</b></td><td class="muted hide900">${avgTxt}</td>`+
+          `<td>${off?off.line:'<span class="muted">—</span>'}</td>${cell('O')}${cell('U')}</tr>`; }).join('')+`</tbody></table></div></div>`; };
+  body.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(440px,100%),1fr));gap:16px">${col(g.away)}${col(g.home)}</div>`+
+    (board?'':`<div class="muted" style="margin-top:8px;font-size:12px">No prices for this game yet — hit ⚡ on its chip (or Pull tonight).</div>`);
+}
+const verdictOf=c=>{ const pick=CARD.find(p=>p.game===c.game&&p.key===c.key&&p.market===c.market); return pick?`<span class="vb vb-take">★ BET ${stakeTxt(pick.stake)}</span>`:c.tier==='take'?'<span class="vb vb-edge" title="an edge, but not one of tonight\'s best (one per player, 2 per team, 3 per game)">edge</span>':c.tier==='flag'?'<span class="vb vb-flag" title="an edge this big usually means news the price hasn\'t caught up with — check the lineup and the goalie">⚠ check</span>':c.tier==='model'?'<span class="muted">model only</span>':c.tier==='dart'?'<span class="muted" title="under a 6% chance — too rare to price reliably, never bet">🎲 long shot</span>':'<span class="muted">pass</span>'; };
+let BOARDROWS=[];
+function renderBoard(){
+  const all=CANDS.filter(c=>!c.dup), showAll=$('boardAll').checked, ord=c=>CARD.some(p=>p.game===c.game&&p.key===c.key&&p.market===c.market)?0:c.tier==='take'?1:c.tier==='flag'?2:3;
+  const rows=all.slice().sort((a,b)=>ord(a)-ord(b)||(b.kelly-a.kelly)||(b.ev-a.ev)).filter(c=>showAll||ord(c)<3); BOARDROWS=rows;
+  const nE=all.filter(c=>c.tier==='take').length, games=new Set(all.map(c=>c.game)).size;
+  $('boardHead').innerHTML=all.length?`<b>${all.length}</b> prices from <b>${games}</b> game${games===1?'':'s'} · <b>${nE}</b> with an edge · <b>${CARD.length}</b> on tonight's card`:'';
+  const logged=new Set(bets.filter(b=>b.result==='pending').map(b=>b.game+'|'+b.key+'|'+b.market));
+  $('boardBody').innerHTML=rows.length?rows.map((c,i)=>{ const isL=logged.has(c.game+'|'+c.key+'|'+c.market);
+    return `<tr class="${ord(c)===0?'rowtake':''}"><td class="l"><span class="tm" style="background:${teamColor(c.abbr)}"></span><b>${esc(c.name)}</b> <span class="muted" style="font-size:11px">${esc(c.abbr)}</span></td>`+
+      `<td class="l"${c.also?` title="${esc('also offered: '+c.also.map(x=>`${bookName(x.book)} ${x.line} ${x.odds}`).join(' · '))}"`:''}>${mktLabel(c.market)}${c.also?` <span class="muted" style="font-size:11px">+${c.also.length} line</span>`:''}</td>`+
+      `<td class="odds">${esc(c.odds)}${bkBadge(c.book)}</td><td class="hide640">${c.stat==='goal'?pct(1-Math.exp(-c.mu)):c.mu.toFixed(2)}</td>`+
+      `<td title="${esc(c.mkt!=null?`${c.src==='own'?'the book\'s own price':'other books'} ${pct(c.mkt)} (cut removed) · model ${pct(c.model)} · fair ${probToAmerican(c.mp)}`:'model only')}">${pct(c.mp)}</td>`+
+      `<td class="${c.ev>0&&c.tier==='take'?'ev-pos':'ev-neg'}">${c.ev>=0?'+':''}${(c.ev*100).toFixed(1)}%</td><td class="hide900">${confBadge(c.conf)}</td><td>${verdictOf(c)}</td>`+
+      `<td><button class="ss logrow" data-i="${i}" ${isL?'disabled':''} title="${isL?'already in your bet log':'log this bet'}" style="${isL?'color:var(--good)':''}">${isL?'✓':'📓'}</button></td></tr>`; }).join('')
+    : `<tr><td class="l muted" colspan="9">${all.length?'No price with an edge right now — tick the box to see them all.':'Nothing pulled yet. ⚡ Pull tonight (or one game) to fill this.'}</td></tr>`;
+}
+const cardStat=(cls,big,small)=>`<div class="cardstat ${cls}">${big}${small?` <span>${small}</span>`:''}</div>`;
+function renderCard(){
+  const body=$('cardBody'), any=Object.keys(BOARDS).some(g=>gameOf(g));
+  if(!CARD.length){ const open=bets.filter(b=>b.result==='pending'&&gameOf(b.game)).length;
+    body.innerHTML=any?(open?cardStat('done','✅ NO NEW BETS',`you have ${open} open bet${open>1?'s':''} tonight — nothing new clears the bar`):cardStat('none','NO BETS TONIGHT','nothing clears the bar'))+'<div class="muted" style="font-size:13px">Nothing at your books beats what the other books say it\'s worth by enough — that\'s the normal case.</div>'
+      :'<div class="muted" style="font-size:13px">Pull tonight\'s prices and the best few bets across every game show up here, with stakes.</div>'; return; }
+  const tot=CARD.reduce((a,c)=>a+c.stake,0), un=CARD.filter(c=>!c.held), nIn=CARD.length-un.length;
+  body.innerHTML=(un.length?cardStat('new',`🆕 ${un.length} NEW BET${un.length>1?'S':''}`, nIn?`not in your log yet · ${nIn} already logged`:'not in your log yet'):cardStat('done','✅ NO NEW BETS',`${CARD.length>1?'all '+CARD.length+' bets on the card are':'the bet on the card is'} already in your log`))+
+    CARD.map((c,i)=>`<div class="cpick ${c.held?'cdone':'cnew'}"><div class="cp1"><span class="${i?'muted':''}" style="min-width:18px;font-weight:800">${i?(i+1)+'.':'★'}</span><b style="color:${teamText(c.abbr)}">${esc(c.name)}</b>${c.held?'':'<span class="newtag">NEW</span>'}<span class="muted" style="font-size:12px">${esc(fmtGame(c.game))}</span>`+
+      `${c.held?'<span class="muted" style="margin-left:auto;font-size:12px">✓ already bet</span>':`<span class="vb vb-take" style="margin-left:auto">bet ${stakeTxt(c.stake)}</span>`}</div>`+
+      `<div class="cp2">${mktLabel(c.market)} <span class="odds">${esc(c.odds)}</span>${bkBadge(c.book)} ${confBadge(c.conf)} <span class="muted" style="font-size:12px">proj ${c.stat==='goal'?pct(1-Math.exp(-c.mu)):c.mu.toFixed(2)} · ${c.src==='own'?'own':'mkt'} ${pct(c.mkt)} → ${pct(c.mp)} vs ${pct(c.bimp)}</span></div></div>`).join('')+
+    `<div class="muted" style="font-size:12px;margin-top:6px">Tonight <b>${stakeTxt(tot)}</b> (${tot.toFixed(1)}% of bankroll, capped at ${NIGHT_CAP}%)</div>`+
+    `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${un.length?`<button class="ss" id="cardLog">📓 log ${un.length===CARD.length?'these':'the '+un.length+' new'}</button>`:''}${linkButtons(un.length?un:CARD, 'Open on')}</div>`;
+  const cl=$('cardLog'); if(cl) cl.onclick=()=>{ let n=0; for(const c of CARD) if(!c.held&&logBet(c, c.stake)) n++; if(n) saveBets(); };
+}
+// ---- bet log: one summary line, then days -> bets
+const LOGOPEN=new Map();
+function renderBets(){
+  const body=$('betBody'); renderBank();
+  if(!bets.length){ body.innerHTML='<div class="muted">No bets yet. Log picks from the card or the 📓 buttons — results and CLV fill themselves in.</div>'; return; }
+  const g=v=>v>0?'ev-pos':(v<0?'ev-neg':''), sgn=v=>(v>=0?'+':'')+v, pc=v=>sgn((v*100).toFixed(1))+'%', usdOn=!!BANK.amt, mny=v=>usdOn?(v>=0?'+':'')+fmtUsd(v):sgn(v.toFixed(2))+'u', amt=v=>usdOn?fmtUsd(v):v.toFixed(1)+'u';
+  const rows=bets.map(b=>{ const dec=oddsDec(b.odds), cd=oddsDec(b.closeOdds), nd=!cd&&b.cur&&b.cur.q?oddsDec(b.cur.q):null;
+    return {b, clv:dec&&cd?dec/cd-1:null, live:dec&&nd?dec/nd-1:null, stk:usdOn?(betUsd(b)||0):(+b.stake||0), pl:betPl(b)}; });
+  const agg=R=>{ let w=0,l=0,p=0,st=0,net=0,cs=0,cn=0,cp=0,open=0,spent=0; for(const r of R){ const x=r.b.result; spent+=r.stk; if(x==='win'||x==='loss'){ x==='win'?w++:l++; st+=r.stk; net+=r.pl||0; } else if(x==='push') p++; else open++; if(r.clv!=null){ cs+=r.clv; cn++; if(r.clv>0) cp++; } }
+    return {n:R.length,w,l,p,net,spent,roi:st?net/st:null,clv:cn?cs/cn:null,cn,cp,open}; }, rec=a=>`${a.w}-${a.l}${a.p?'-'+a.p:''}`, A=agg(rows);
+  let html=`<div class="logsum"><span>Record <b>${rec(A)}</b></span><span>Spent <b>${amt(A.spent)}</b></span><span>Won/lost <b class="${g(A.net)}">${mny(A.net)}</b></span><span>ROI <b class="${g(A.roi)}">${A.roi==null?'—':pc(A.roi)}</b></span>`+
+    `<span title="how much better your price was than the closing price">CLV <b class="${g(A.clv)}">${A.clv==null?'—':pc(A.clv)}</b>${A.cn?` <span class="muted">(${Math.round(A.cp/A.cn*100)}% beat the close)</span>`:''}</span>${A.open?`<span><b>${A.open}</b> open</span>`:''}</div>`;
+  const dayOf=b=>{ const d=new Date(b.ko||b.ts); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); }, days=new Map(); for(const r of rows){ const k=dayOf(r.b); (days.get(k)||days.set(k,[]).get(k)).push(r); }
+  [...days.keys()].sort((a,b)=>b-a).forEach((dk,di)=>{ const R=days.get(dk), a=agg(R), open=LOGOPEN.has(dk)?LOGOPEN.get(dk):(di===0||a.open>0);
+    html+=`<details class="daygrp" data-d="${dk}"${open?' open':''}><summary><b>${new Date(dk).toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'})}</b> <span class="muted">· ${a.n} bet${a.n>1?'s':''}${a.open?` · ${a.open} open`:''}${a.w+a.l?` · ${rec(a)}`:''} · spent ${amt(a.spent)}</span>${a.w+a.l?` <b class="${g(a.net)}">${mny(a.net)}</b>`:''}${a.clv!=null?` <span class="muted">· CLV</span> <b class="${g(a.clv)}">${pc(a.clv)}</b>`:''}</summary>`+
+      `<div class="scroll"><table><thead><tr><th class="l">Bet</th><th>Odds</th><th>Close · CLV</th><th>Stake</th><th>Result</th><th>P/L</th><th></th></tr></thead><tbody>`+
+      R.map(({b,clv,live,pl})=>{ const mine=+String(b.market).split('|')[3], moved=b.cur&&b.cur.l!=null&&b.cur.l!==mine, arrow=moved?(b.cur.l<mine?'▼':'▲')+b.cur.l+' ':'';
+        const clvTxt=clv!=null?` <b class="${g(clv)}">${pc(clv)}</b>${b.closeEst?'<span class="muted" title="the line moved — this is the equivalent price at your line"> ≈</span>':''}`:b.result!=='pending'||!b.cur?'':live!=null?` <span class="${g(live)}" style="font-size:12px;opacity:.85" title="${esc((moved?`the line moved to ${b.cur.l} (${b.cur.o}) — about ${b.cur.q} at your line. `:`now ${b.cur.q}. `)+'A live read, not final until the close.')}">${arrow}≈${pc(live)}</span>`:moved?` <span class="muted" style="font-size:12px">${arrow}</span>`:'';
+        return `<tr><td class="l"><b title="chance when logged: ${b.modelProb!=null?pct(b.modelProb):'—'}">${esc(b.player)}</b> <span class="muted">${mktLabel(b.market)} · ${esc(fmtGame(b.game))}</span>${b.offBoard&&b.result==='pending'?' <span style="color:var(--warn);font-size:12px" title="your book no longer offers this prop">⚠ off the board</span>':''}</td>`+
+          `<td class="odds">${esc(b.odds)}${bkBadge(b.book)}</td><td><input class="betclose" data-id="${b.id}" value="${esc(b.closeOdds||'')}" placeholder="close" style="width:62px;font-family:var(--mono);font-size:13px;text-align:right">${clvTxt}</td>`+
+          `<td title="${b.stake}u">${betStakeTxt(b)}</td><td><select class="betres ss" data-id="${b.id}">${['pending','win','loss','push'].map(x=>`<option${x===b.result?' selected':''}>${x}</option>`).join('')}</select>${b.auto&&b.result!=='pending'?` <span title="${esc('settled from ESPN: '+b.auto)}">🤖</span>`:''}${b.result==='pending'&&b.autoNote?` <span title="${esc(b.autoNote)}" style="cursor:help">✋</span>`:''}</td>`+
+          `<td class="${pl!=null?g(pl):''}">${pl==null?'—':mny(pl)}</td><td><button class="ss betdel" data-id="${b.id}" style="color:var(--warn)">✕</button></td></tr>`; }).join('')+`</tbody></table></div></details>`; });
+  body.innerHTML=html;
+}
+function renderTest(){ const bt=M.backtest||{}; $('testNote').innerHTML=`<b>How the simulator was tested.</b> Every game of the ${M.test-1}-${String(M.test).slice(2)} season, using only what was known before puck drop (settings learned on ${M.train-1}-${String(M.train).slice(2)}; tonight's starting goalie treated as known, as it is announced before the game). Each bet was a book-like line — shots at his season average on the half shot, goals and points at 0.5 — scored separately on the two halves of the season:`+
+  `<div class="scroll"><table style="margin-top:6px;max-width:620px"><thead><tr><th class="l">Bet</th><th>Player-games</th><th>Simulator</th><th>Season average</th></tr></thead><tbody>`+
+  STATS.map(s=>{ const x=bt[s]; return x?`<tr><td class="l">${SHORT[s]}</td><td>${x.n.toLocaleString()}</td><td><b>${x.brier[0].toFixed(4)} / ${x.brier[1].toFixed(4)}</b></td><td class="muted">${x.naive[0].toFixed(4)} / ${x.naive[1].toFixed(4)}</td></tr>`:''; }).join('')+
+  `</tbody></table></div><div class="muted" style="font-size:12px;margin-top:4px">Lower is better. A book's line is far sharper than a season average, and <b>this has not been run against real NHL prices yet</b>. Until it is, the app trusts the other books: the simulator gets a ${Math.round(PROP_W*100)}% say on shots and points and none on anytime goal.</div>`; }
+function renderAll(){ buildCands(); buildCard(); renderSlate(); renderGame(); renderBoard(); renderCard(); renderBets(); oddsStatus(); }
+
+// ---------------------------------------------------------------- auto-settle (ESPN box scores) and closing prices
+let AUTO_NOTE='', autoBusy=false;
+async function autoSettle(manual){
+  if(autoBusy) return; const pend=bets.filter(b=>b.result==='pending'&&b.ev&&b.key&&Date.now()>Date.parse(b.ko||0)+2.5*3600e3);
+  if(!pend.length){ if(manual){ $('autoMsg').textContent='🤖 no open bet\'s game has finished yet'; } return; }
+  autoBusy=true; let settled=0, hand=0; const cache=new Map();
+  try{ for(const b of pend){ let sum=cache.get(b.ev); if(sum===undefined){ try{ sum=await (await fetch(SUM+b.ev)).json(); }catch(e){ sum=null; } cache.set(b.ev, sum); }
+      const c=sum&&sum.header&&sum.header.competitions&&sum.header.competitions[0]; if(!c||!(c.status&&c.status.type&&c.status.type.completed)) continue;
+      const id=b.key.split('|')[1]; let row=null, K=null; for(const tb of ((sum.boxscore&&sum.boxscore.players)||[])) for(const st of (tb.statistics||[])){ const a=(st.athletes||[]).find(x=>String(x.athlete.id)===id); if(a){ row=a; K=st.keys||[]; } }
+      if(!row||!(row.stats||[]).length){ b.result='push'; b.auto='not in the box score (scratched) — void'; b.st=Date.now(); delete b.autoNote; settled++; continue; }
+      const num=n=>{ const v=parseFloat(row.stats[K.indexOf(n)]); return isNaN(v)?0:v; }, [,s,side,line]=b.market.split('|');
+      const v=s==='sog'?num('shotsTotal'):s==='goal'?num('goals'):s==='pts'?num('goals')+num('assists'):null; if(v==null){ hand++; continue; }
+      b.result=v===+line?'push':((v>+line)===(side==='O')?'win':'loss'); b.auto=`${SHORT[s]} ${v}`; b.st=Date.now(); delete b.autoNote; settled++; }
+    if(settled||hand) saveBets();
+    AUTO_NOTE=[settled?`🤖 settled <b>${settled}</b> bet${settled>1?'s':''} from ESPN's box scores`:'', hand?`<span style="color:var(--warn)">${hand} to settle by hand (✋)</span>`:''].filter(Boolean).join(' · ')||(manual?'🤖 nothing final yet':AUTO_NOTE);
+    $('autoMsg').innerHTML=AUTO_NOTE;
+  }finally{ autoBusy=false; }
+}
+// Close = your book's price right before puck drop. This button takes it now for every open bet whose game hasn't started.
+async function pullCloses(){
+  const msg=$('autoMsg'), open=bets.filter(b=>b.result==='pending'&&!b.closeOdds&&Date.parse(b.ko||0)>Date.now()), games=[...new Set(open.map(b=>b.game))].map(gameOf).filter(Boolean);
+  if(!oddsKey()){ msg.innerHTML=oddsWhy({status:'nokey'}); return; } if(!games.length){ msg.textContent='no open bets on games that haven\'t started'; return; }
+  let filled=0; for(const g of games){ const L=open.filter(b=>b.game===g.game), mk=[...new Set(L.map(b=>oaOf(b.market.split('|')[1])))].filter(Boolean);
+    try{ const board=await pullGame(g, mk); applyBoard(g, board, true); for(const b of L){ const v=closeView(b, board); if(v&&v.odds){ b.closeOdds=v.odds; if(v.est) b.closeEst=`${v.line} ${v.raw}`; else delete b.closeEst; filled++; } } }catch(e){ msg.innerHTML=`${fmtGame(g.game)}: ${oddsWhy(e)}`; } }
+  saveBets(); oddsStatus(); msg.innerHTML=`⚡ closing price filled for <b>${filled}</b> bet${filled===1?'':'s'}`;
+}
+
+// ---------------------------------------------------------------- wiring
+$('slateChips').addEventListener('click', e=>{ const one=e.target.closest('.pullone'); if(one){ e.stopPropagation(); pullAll(one.dataset.g); return; } const c=e.target.closest('.chip'); if(c){ CUR=c.dataset.g; renderAll(); } });
+$('statTabs').addEventListener('click', e=>{ const t=e.target.closest('.tab'); if(t){ STAT=t.dataset.s; renderGame(); } });
+$('gameBody').addEventListener('change', e=>{ const day=(STATUS[SLATE_DAY]=STATUS[SLATE_DAY]||{});
+  const s=e.target.closest('.stsel'); if(s){ day[s.dataset.key]=s.value; lsW('nhlp_status', STATUS); renderAll(); return; }
+  const gs=e.target.closest('.gsel'); if(gs){ day['G|'+gs.dataset.g+'|'+gs.dataset.t]=gs.value; lsW('nhlp_status', STATUS); renderAll(); } });
+$('boardBody').addEventListener('click', e=>{ const b=e.target.closest('.logrow'); if(!b) return; const c=BOARDROWS[+b.dataset.i]; if(!c) return; const pick=CARD.find(p=>p.game===c.game&&p.key===c.key&&p.market===c.market);
+  if(logBet(c, pick?pick.stake:Math.max(0.1, Math.min(BET_CAP, Math.round(0.25*c.kelly*UNITS*10)/10)))) saveBets(); });
+$('boardAll').onchange=renderBoard; $('cardN').onchange=renderAll; $('pullAll').onclick=()=>pullAll(); $('settleNow').onclick=()=>autoSettle(true); $('closeNow').onclick=pullCloses;
+$('betBody').addEventListener('change', e=>{ const b=bets.find(x=>x.id===e.target.dataset.id); if(!b) return;
+  if(e.target.classList.contains('betclose')){ b.closeOdds=e.target.value.trim(); delete b.closeEst; } else if(e.target.classList.contains('betres')){ b.result=e.target.value; delete b.auto; if(b.result==='pending') delete b.st; else b.st=Date.now(); } saveBets(); });
+$('betBody').addEventListener('click', e=>{ const d=e.target.closest('.betdel'); if(d){ bets=bets.filter(x=>x.id!==d.dataset.id); saveBets(); } });
+$('betBody').addEventListener('toggle', e=>{ const d=e.target; if(d.classList&&d.classList.contains('daygrp')) LOGOPEN.set(+d.dataset.d, d.open); }, true);
+$('bankUsd').addEventListener('change', e=>{ const v=+e.target.value||0; BANK=v>0?{amt:+v.toFixed(2), at:Date.now()}:{amt:null, at:0}; lsW('nhlp_bank', BANK); renderAll(); });
+$('bankUsd').addEventListener('keydown', e=>{ if(e.key==='Enter') e.target.blur(); });
+$('betExport').onclick=()=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify({app:'nhl-prop-predictor', exportedAt:new Date().toISOString(), bets, bank:BANK},null,1)],{type:'application/json'})); a.download=`nhl-bets-${new Date().toISOString().slice(0,10)}.json`; document.body.appendChild(a); a.click(); setTimeout(()=>a.remove(),500); };
+$('betImport').onclick=()=>$('betImportFile').click();
+$('betImportFile').onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(!f) return; const rd=new FileReader(); rd.onload=()=>{ try{ const d=JSON.parse(rd.result); const have=new Set(bets.map(b=>b.id)); for(const b of (d.bets||[])) if(b&&b.id&&!have.has(b.id)) bets.push(b); bets.sort((x,y)=>String(y.ts).localeCompare(String(x.ts))); if(d.bank&&d.bank.amt&&!BANK.amt){ BANK=d.bank; lsW('nhlp_bank', BANK); } saveBets(); }catch(err){ alert('That file isn\'t an export from this app.'); } }; rd.readAsText(f); e.target.value=''; };
+$('betClear').onclick=()=>{ if(bets.length&&confirm('Clear all '+bets.length+' logged bets? This can\'t be undone.')){ bets=[]; saveBets(); } };
+// odds settings
+const STATES='AL Alabama,AK Alaska,AZ Arizona,AR Arkansas,CA California,CO Colorado,CT Connecticut,DE Delaware,DC Washington DC,FL Florida,GA Georgia,HI Hawaii,ID Idaho,IL Illinois,IN Indiana,IA Iowa,KS Kansas,KY Kentucky,LA Louisiana,ME Maine,MD Maryland,MA Massachusetts,MI Michigan,MN Minnesota,MS Mississippi,MO Missouri,MT Montana,NE Nebraska,NV Nevada,NH New Hampshire,NJ New Jersey,NM New Mexico,NY New York,NC North Carolina,ND North Dakota,OH Ohio,OK Oklahoma,OR Oregon,PA Pennsylvania,RI Rhode Island,SC South Carolina,SD South Dakota,TN Tennessee,TX Texas,UT Utah,VT Vermont,VA Virginia,WA Washington,WV West Virginia,WI Wisconsin,WY Wyoming';
+$('oddsState').insertAdjacentHTML('beforeend', STATES.split(',').map(x=>`<option value="${x.slice(0,2).toLowerCase()}">${esc(x.slice(3))}</option>`).join(''));
+if(!CFG.state){ try{ const n=JSON.parse(localStorage.getItem('nfltd_oddscfg')||'{}'); if(n.state) CFG.state=n.state; }catch(e){} }   // the NFL app's state, on the same site
+const bkBoxes=[...document.querySelectorAll('.bkchk')], mkBoxes=[...document.querySelectorAll('.mkchk')];
+bkBoxes.forEach(c=>{ c.checked=myBooks().includes(c.value); }); mkBoxes.forEach(c=>{ c.checked=mkOn(c.value); }); $('oddsReserve').value=CFG.reserve; $('oddsState').value=CFG.state||'';
+const showCost=()=>{ const n=pickedMarkets().length; $('oddsCost').textContent=n+' credit'+(n===1?'':'s'); };
+const saveCfg=()=>{ CFG={books:bkBoxes.filter(c=>c.checked).map(c=>c.value), mk:Object.fromEntries(mkBoxes.map(c=>[c.value,c.checked])), reserve:Math.max(0,+$('oddsReserve').value||0), state:$('oddsState').value||''}; lsW('nhlp_oddscfg', CFG); showCost(); renderAll(); };
+bkBoxes.concat(mkBoxes, [$('oddsReserve'), $('oddsState')]).forEach(el=>el.addEventListener('change', saveCfg)); showCost();
+document.addEventListener('click', e=>{ const b=e.target.closest&&e.target.closest('.statepick'); if(!b) return; $('oddsCfg').open=true; showTab('card'); $('oddsCfg').scrollIntoView({behavior:'smooth'}); setTimeout(()=>$('oddsState').focus(), 400); });
+$('oddsKeyMsg').textContent=oddsKey()?'saved ✓':'';
+$('oddsKeySave').onclick=()=>{ const v=$('oddsKeyIn').value.trim(); try{ if(v) localStorage.setItem('nhlp_oddskey', v); else localStorage.removeItem('nhlp_oddskey'); }catch(e){} $('oddsKeyIn').value=''; $('oddsKeyMsg').textContent=oddsKey()?'saved ✓':'removed'; };
+// phones: one tab at a time
+function showTab(t){ document.body.dataset.mtab=t; document.querySelectorAll('#mtabbar button').forEach(b=>b.classList.toggle('on', b.dataset.t===t)); lsW('nhlp_mtab', t); }
+$('mtabbar').addEventListener('click', e=>{ const b=e.target.closest('button[data-t]'); if(b){ showTab(b.dataset.t); window.scrollTo(0,0); } });
+showTab(lsJ('nhlp_mtab','card'));
+
+renderTest(); renderAll(); loadSlate(); loadInjuries();
+setTimeout(()=>autoSettle(false), 4000); setInterval(()=>autoSettle(false), 10*60e3);
+})();
+</script>
+</body>
+</html>
