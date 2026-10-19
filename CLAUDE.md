@@ -80,6 +80,9 @@ bet-log history). See README.md for the model and its backtest.
   flashed a page between sports). Cross-document view transitions (`@view-transition`, the top bar held by
   `view-transition-name`), a speculation-rules PREFETCH on hover (prefetch only — prerender would run the page's JS and
   could spend odds credits), and `sims_chip` (the last pot boxes, shown instantly before the live render).
+- First paint waits for the app to draw itself: `<link rel="expect" href="#sims-ready" blocking="render">` in the head and
+  `<i id="sims-ready" hidden>` right AFTER the main script (keep it last in body), so a sport switch fades from one finished
+  page to the next instead of showing a half-drawn one.
 
 ## The user
 - Bets FanDuel + DraftKings (+ BetMGM), wants "what do I bet and how much, in dollars", gets overwhelmed — keep the card
