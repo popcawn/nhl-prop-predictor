@@ -3,7 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>NHL Prop Simulator</title>
+<title>PROP SIM</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%232f6fe4'/%3E%3Cstop offset='1' stop-color='%236a55f0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3C/svg%3E">
+<script type="speculationrules">{"prefetch":[{"source":"document","where":{"selector_matches":".sportbar a, a.sport, a.brand"},"eagerness":"moderate"}]}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <script>try{ if(localStorage.getItem('sims_theme')==='dim') document.documentElement.dataset.theme='dim'; }catch(e){}</script>
@@ -223,13 +225,18 @@
     h2{font-size:17px;margin-top:18px}
   }
   select.ss{width:auto}
+
+  /* switching sports: no redirect page, the top bar stays put and the page cross-fades (Chrome / Edge) */
+  @view-transition{navigation:auto}
+  .topbar{view-transition-name:topbar}
+  ::view-transition-old(root),::view-transition-new(root){animation-duration:.16s}
 </style>
 </head>
 <body>
 <header class="topbar" id="topbar"><div class="topin">
-  <a class="brand" href="../" title="Prop Sims — all three sports"><i></i>Prop Sims</a>
-  <nav class="sportbar" id="sportBar"><a href="../nfl-td-predictor/">🏈 NFL</a><a href="../nba-prop-predictor/">🏀 NBA</a><a href="../nhl-prop-predictor/" class="on">🏒 NHL</a></nav>
-  <div class="pot" id="potChip"></div>
+  <a class="brand" href="../" title="PROP SIM — all three sports"><i></i>PROP SIM</a>
+  <nav class="sportbar" id="sportBar"><a href="../nfl-td-predictor/nfl-td-predictor.html">🏈 NFL</a><a href="../nba-prop-predictor/nba-prop-predictor.html">🏀 NBA</a><a href="../nhl-prop-predictor/nhl-prop-predictor.html" class="on">🏒 NHL</a></nav>
+  <div class="pot" id="potChip"></div><script>try{ const h=localStorage.getItem('sims_chip'); if(h) document.getElementById('potChip').innerHTML=h; }catch(e){}</script>
   <button class="themebtn" id="themeBtn" title="switch to dim">🌙</button>
 </div>
 <nav class="dtabs" id="dtabs"><button data-t="card">⚡ Bets</button><button data-t="games">🏒 Games</button><button data-t="priced">★ Priced</button><button data-t="bets">📓 Bet log</button></nav>
@@ -449,7 +456,8 @@ function renderPotChip(now){ const c=$('potChip'); if(!c) return; const AB=allBe
   c.innerHTML=st('big','Bankroll', now!=null?fmtUsd(now):'<span class="muted">set it</span>', 'one pot for NFL, NBA and NHL')+
     (now!=null&&W.length?st('','This week', `<span class="${wpl>0.004?'up':wpl<-0.004?'dn':''}">${wpl>=0?'+':''}${fmtUsd(wpl)}</span>`, 'won / lost on bets settled since Monday — every sport'):'')+
     st('','Bets', AB.length, 'every bet you\'ve logged — NFL, NBA and NHL')+st('','Open', open, 'bets still waiting on a result — every sport')+
-    (onG.length?st('','This game', fmtUsd(gUsd), 'staked on the game you have open'):''); }
+    (onG.length?st('','This game', fmtUsd(gUsd), 'staked on the game you have open'):'');
+  try{ const sh=c.innerHTML.replace(/<div class="stat [^"]*" title="staked on the game you have open">[\s\S]*$/, ''); localStorage.setItem('sims_chip', sh); }catch(e){} }
 window.addEventListener('storage', e=>{ if(e.key==='nfltd_bank'){ BANK=Object.assign({amt:null, at:0, mt:0}, lsJ('nfltd_bank', {})); renderAll(); } else if(e.key&&e.key!=='nhlp_bets'&&Object.values(SPORT_BETS).includes(e.key)) renderBank(); });
 // ---------- ☁ SYNC — the NFL app's: same token and secret gist (one site, one browser storage), this app's own file in it,
 // so a bet logged on the phone shows on the PC. Records carry mt (newest edit wins); deletions are tombstones; the pot
@@ -465,7 +473,7 @@ const syncCfg=()=>lsJ('nfltd_sync', {})||{};
 async function gh(p, opt){ opt=opt||{}; const r=await fetch(GH+p, {method:opt.method||'GET', cache:'no-store', body:opt.body, headers:Object.assign({Authorization:'Bearer '+syncCfg().token, Accept:'application/vnd.github+json'}, opt.body?{'Content-Type':'application/json'}:{})}); if(!r.ok){ const e=new Error('GitHub '+r.status); e.status=r.status; throw e; } return r.json(); }
 function syncSoon(ms){ if(!syncCfg().token) return; clearTimeout(syncTimer); syncTimer=setTimeout(syncNow, ms==null?2500:ms); }
 function syncNote(){ const el=$('syncNote'); if(!el) return; const C=syncCfg();
-  el.innerHTML=!C.token?'<a href="../nfl-td-predictor/" title="☁ Sync keeps your bets the same on every device — set it up once in the NFL app\'s bet log; it covers all three sports">☁ Sync: set up in 🏈 NFL</a>':SYNC_ERR?`<span style="color:var(--warn)">☁ ${esc(SYNC_ERR)}</span>`:SYNC_OK?`☁ synced ${new Date(SYNC_OK).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}`:'☁ Sync on'; }
+  el.innerHTML=!C.token?'<a href="../nfl-td-predictor/nfl-td-predictor.html" title="☁ Sync keeps your bets the same on every device — set it up once in the NFL app\'s bet log; it covers all three sports">☁ Sync: set up in 🏈 NFL</a>':SYNC_ERR?`<span style="color:var(--warn)">☁ ${esc(SYNC_ERR)}</span>`:SYNC_OK?`☁ synced ${new Date(SYNC_OK).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}`:'☁ Sync on'; }
 async function syncNow(){ const C=syncCfg(); if(!C.token){ syncNote(); return; } if(syncBusy){ syncAgain=true; return; } syncBusy=true;
   try{ let gid=C.gistId;
     if(!gid){ for(let page=1; page<=5&&!gid; page++){ const list=await gh(`/gists?per_page=100&page=${page}`); const hit=list.find(x=>x.files&&(x.files['nfl-td-sync.json']||x.files[SYNC_FILE])); if(hit) gid=hit.id; if(list.length<100) break; }

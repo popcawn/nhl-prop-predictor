@@ -75,6 +75,11 @@ bet-log history). See README.md for the model and its backtest.
 - Tabs at EVERY width now (sections carry data-m): card = ⚡ Bets (Pull tonight hero + tonight's card as cards), games = players by game, priced = ★ every priced bet, bets = 📓 Bet log (bankroll beside it ≥1200px).
 - The first tab is a big pull button (.hero) and the bets as cards (betCard(): name, market, price + book, Bet $, chance bar
   vs the price's chance, EV, an Open-on-<book> link). The internals (pulls, card rules, staking, log) did not change.
+- Name: PROP SIM (tab title, brand, front door; user 2026-10-19). Switching sports must feel seamless: links go STRAIGHT to
+  `<repo>/<repo>.html` — never the folder (its index.html is only a redirect for old links/bookmarks, and linking it
+  flashed a page between sports). Cross-document view transitions (`@view-transition`, the top bar held by
+  `view-transition-name`), a speculation-rules PREFETCH on hover (prefetch only — prerender would run the page's JS and
+  could spend odds credits), and `sims_chip` (the last pot boxes, shown instantly before the live render).
 
 ## The user
 - Bets FanDuel + DraftKings (+ BetMGM), wants "what do I bet and how much, in dollars", gets overwhelmed — keep the card
