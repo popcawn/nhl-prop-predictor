@@ -5,10 +5,16 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>PROP SIM</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%232f6fe4'/%3E%3Cstop offset='1' stop-color='%236a55f0'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='8' fill='url(%23g)'/%3E%3C/svg%3E">
-<script type="speculationrules">{"prefetch":[{"source":"document","where":{"selector_matches":".sportbar a, a.sport, a.brand"},"eagerness":"moderate"}]}</script>
+<script type="speculationrules">{"prerender":[{"source":"document","where":{"selector_matches":".sportbar a:not(.on), a.sport"},"eagerness":"moderate"}],"prefetch":[{"source":"document","where":{"selector_matches":"a.brand"},"eagerness":"moderate"}]}</script>
 <link rel="expect" href="#sims-ready" blocking="render">   <!-- first paint waits for the app to draw itself: switching sports fades from one finished page to the next -->
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="preload" href="/fonts/inter-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/spacegrotesk-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/jetbrainsmono-latin.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+  @font-face{font-family:Inter;src:url(/fonts/inter-latin.woff2) format("woff2");font-weight:100 900;font-display:optional}
+  @font-face{font-family:"Space Grotesk";src:url(/fonts/spacegrotesk-latin.woff2) format("woff2");font-weight:300 700;font-display:optional}
+  @font-face{font-family:"JetBrains Mono";src:url(/fonts/jetbrainsmono-latin.woff2) format("woff2");font-weight:100 800;font-display:optional}
+</style>
 <script>try{ if(localStorage.getItem('sims_theme')==='dim') document.documentElement.dataset.theme='dim'; }catch(e){}</script>
 <style>
   :root{--bg:#0a0e13;--panel:#121923;--panel2:#18212d;--line:#1d2836;--line2:#2a3849;--ink:#e8eef6;--ink2:#a8b6c7;--ink3:#7c8b9d;--accent:#4da3ff;--good:#34d399;--bad:#f87171;--warn:#fbbf24;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
@@ -227,10 +233,10 @@
   }
   select.ss{width:auto}
 
-  /* switching sports: no redirect page, the top bar stays put and the page cross-fades (Chrome / Edge) */
+  /* switching sports: no redirect page; the page you leave stays on screen until the next one is fully drawn, then they
+     swap in one frame (no fade: a cross-fade showed both pages at once) — Chrome / Edge */
   @view-transition{navigation:auto}
-  .topbar{view-transition-name:topbar}
-  ::view-transition-old(root),::view-transition-new(root){animation-duration:.16s}
+  ::view-transition-group(*),::view-transition-old(*),::view-transition-new(*){animation:none}
 </style>
 </head>
 <body>
@@ -399,6 +405,7 @@ async function loadSlate(){
     let j; try{ j=await (await fetch(`${SB}?dates=${ymd(d)}`,{cache:'no-store'})).json(); }catch(e){ break; }
     const games=(j.events||[]).filter(e=>e.season&&e.season.type>=2).map(evToGame).filter(Boolean);
     if(games.some(g=>!g.final)){ SLATE=games.sort((a,b)=>Date.parse(a.tip)-Date.parse(b.tip)); SLATE_DAY=ymd(d); break; } }
+  if(SLATE.length) lsW('nhlp_slate', {day:SLATE_DAY, games:SLATE});   // so the next visit opens fully drawn
   if(!CUR||!SLATE.some(g=>g.game===CUR)) CUR=(SLATE.find(g=>g.state==='pre')||SLATE[0]||{}).game||null;
   for(const k of Object.keys(STATUS)) if(k!==SLATE_DAY) delete STATUS[k];
   renderAll();
@@ -406,7 +413,7 @@ async function loadSlate(){
 async function loadInjuries(){ try{ const j=await (await fetch('https://site.api.espn.com/apis/site/v2/sports/hockey/nhl/injuries')).json(); const m=new Map();
     for(const tm of (j.injuries||[])) for(const it of (tm.injuries||[])){ const A=it.athlete||{}, id=(((A.links||[]).map(l=>l.href).join(' ').match(/\/id\/(\d+)/)||[])[1])||A.id; if(!id) continue;   // the injury feed's own id is not the player's — his link has it
       const st=String(it.status||'').toLowerCase(); m.set(String(id), /out|suspen|injured reserve|\bir\b/.test(st)?'OUT':/day/.test(st)?'Q':'Q'); }
-    INJ=m; renderAll(); }catch(e){} }
+    INJ=m; lsW('nhlp_inj', {at:Date.now(), m:[...m]}); renderAll(); }catch(e){} }
 const statusOf=key=>((STATUS[SLATE_DAY]||{})[key]) || INJ.get(key.split('|')[1]) || 'ACT';
 const gameOf=id=>SLATE.find(g=>g.game===id)||null;
 const goaliesOf=abbr=>(S.rosters[abbr]||[]).filter(p=>p.kind===2);
@@ -510,7 +517,10 @@ let BOARDS=(b=>{ const old=Date.now()-3*864e5; for(const k of Object.keys(b)) if
 const oddsFail=(status,code)=>Object.assign(new Error('odds '+status),{status,code});
 const oddsWhy=e=>{ const s=e&&e.status; return s==='nokey'?'add your The Odds API key under odds settings':s==='noevent'?'not on The Odds API\'s board yet':s==='started'?'already started':s===401?'key rejected':(s===429||s===422)?'out of credits':'couldn\'t reach The Odds API'; };
 function oddsStatus(){ $('oddsLeft').textContent=oddsLeft!=null?`${oddsLeft} credits left`:''; }
-async function apiGet(url){ const r=await fetch(url); const rem=r.headers.get('x-requests-remaining'); if(rem!=null){ oddsLeft=+rem; lsW('nhlp_oddsleft', oddsLeft); }
+// a page built in the background (you pointed at its sport button) shows itself but spends nothing — no odds pulls,
+// settling or sync — until you actually open it
+function opened(){ return document.prerendering?new Promise(r=>document.addEventListener('prerenderingchange', r, {once:true})):Promise.resolve(); }
+async function apiGet(url){ await opened(); const r=await fetch(url); const rem=r.headers.get('x-requests-remaining'); if(rem!=null){ oddsLeft=+rem; lsW('nhlp_oddsleft', oddsLeft); }
   const j=await r.json().catch(()=>({})); if(!r.ok) throw oddsFail(r.status, j.error_code); return j; }
 async function eventsList(){ const key=oddsKey(); if(!key) throw oddsFail('nokey'); if(oddsEvents&&Date.now()-oddsEvents.t<10*60e3) return oddsEvents.list;
   const list=await apiGet(`${ODDS_API}/events?apiKey=${encodeURIComponent(key)}`); oddsEvents={t:Date.now(), list}; return list; }   // free
@@ -853,9 +863,14 @@ window.addEventListener('storage', e=>{ if(e.key==='sims_theme'&&e.newValue&&e.n
 
 showTab(lsJ('nhlp_mtab','card'));
 
+// open fully drawn: tonight's games + injuries as this browser last saw them; ESPN refreshes both a moment later
+{ const c=lsJ('nhlp_slate', null); if(c&&c.day>=ymd(new Date())&&Array.isArray(c.games)&&c.games.length){ SLATE=c.games; SLATE_DAY=c.day; CUR=(SLATE.find(g=>g.state==='pre')||SLATE[0]||{}).game||null; }
+  const ij=lsJ('nhlp_inj', null); if(ij&&Date.now()-ij.at<6*3600e3&&Array.isArray(ij.m)) INJ=new Map(ij.m); }
 renderTest(); renderAll(); loadSlate(); loadInjuries(); syncNote();
-setTimeout(()=>syncNow(), 2000); setInterval(()=>syncNow(), 5*60e3); window.addEventListener('focus', ()=>syncSoon(500));
-setTimeout(()=>autoSettle(false), 4000); setInterval(()=>autoSettle(false), 10*60e3);
+opened().then(()=>setTimeout(()=>syncNow(), 2000)); setInterval(()=>{ if(!document.prerendering) syncNow(); }, 5*60e3); window.addEventListener('focus', ()=>syncSoon(500));
+opened().then(()=>setTimeout(()=>autoSettle(false), 4000)); setInterval(()=>{ if(!document.prerendering) autoSettle(false); }, 10*60e3);
+// opened after being built in the background: catch up on the pot
+document.addEventListener('prerenderingchange', ()=>{ BANK=Object.assign({amt:null, at:0, mt:0}, lsJ('nfltd_bank', {})); renderAll(); });
 })();
 </script>
 <i id="sims-ready" hidden></i>
