@@ -16,6 +16,10 @@
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px}
   .muted{color:var(--ink3)} .odds{font-family:var(--mono)}
   .ev-pos{color:var(--good);font-weight:800} .ev-neg{color:var(--ink3)}
+  .plpill{display:inline-block;font-weight:900;font-size:14px;padding:1px 10px;border-radius:999px;margin-left:8px;vertical-align:1px}
+  .plpill.pos{background:rgba(52,211,153,.16);color:var(--good)} .plpill.neg{background:rgba(248,113,113,.17);color:var(--bad)} .plpill.zero{background:var(--panel2);color:var(--ink2)}
+  .clv-bad{color:var(--bad);font-weight:800}
+  table.bkstat{max-width:640px;margin-top:6px} table.bkstat td, table.bkstat th{padding:5px 7px;font-size:12.5px}
   input,select,textarea{background:var(--panel2);color:var(--ink);border:1px solid var(--line2);border-radius:8px;padding:5px 8px;font:inherit}
   button{font:inherit;cursor:pointer}
   .btn{background:var(--accent);color:#04121f;border:0;border-radius:10px;font-weight:800;padding:7px 14px}
@@ -174,6 +178,7 @@
         </div>
         <div id="betBody"></div>
         <details style="margin-top:12px"><summary style="cursor:pointer;font-size:13px;font-weight:700">⚙ More <span class="muted" style="font-weight:400">— how it was tested · backup</span></summary>
+          <div class="sub" style="font-size:13px"><b>🏆 By sportsbook</b> <span class="muted">— every sport's settled bets, most profitable first</span><div id="bookStats"></div></div>
           <div class="sub" id="testNote" style="font-size:13px;line-height:1.55"></div>
           <div class="sub"><b>Backup</b> <button class="ss" id="betExport">⬇ Export</button> <button class="ss" id="betImport">⬆ Import</button> <input type="file" id="betImportFile" accept=".json,application/json" style="display:none"> <button class="ss" id="betClear">Clear log</button></div>
           <div class="sub muted" style="font-size:12px;line-height:1.55"><b>How to read it.</b> <b>CLV</b> = how much better your price was than the closing price at the same book; beat the close over many bets and profit follows. A grey <b>≈</b> CLV is a live read from your last pull. <b>▼ / ▲</b> = the book moved the line since you bet. <b>🤖</b> = settled from ESPN's box score (a scratched player is a void). <b>✋</b> = settle that one yourself.</div>
@@ -301,7 +306,9 @@ function renderBank(){ const inp=$('bankUsd'), now=bankNow(); if(document.active
   const bySport=Object.keys(SPORT_LBL).map(k=>{ const L=done.filter(b=>b.sport===k); return L.length?`${SPORT_LBL[k]} ${(x=>(x>=0?'+':'')+fmtUsd(x))(L.reduce((a,b)=>a+betPl(b),0))}`:''; }).filter(Boolean).join(' · '); renderPotChip(now, open.length);
   $('bankNow').innerHTML=done.length?`<b class="${d>0?'ev-pos':d<0?'ev-neg':''}">${d>=0?'+':''}${fmtUsd(d)}</b> <span class="muted">from ${done.length} settled bet${done.length>1?'s':''}${bySport?' — '+bySport:''}</span>`:'';
   $('bankNote').innerHTML=`<b>One pot</b> for 🏈 🏀 🏒 — 1 unit = 1% = <b>${fmtUsd(unitUsd())}</b>.${open.length?` <b>${fmtUsd(risk)}</b> riding on ${open.length} open bet${open.length>1?'s':''}.`:''} Deposited or withdrew? Type the new balance.`; }
-function renderPotChip(now, nOpen){ const c=$('potChip'); if(c) c.innerHTML=now!=null?`💰 <b>${fmtUsd(now)}</b>${nOpen?` · ${nOpen} open`:''}`:'<span class="muted">💰 set your bankroll</span>'; }
+function renderPotChip(now){ const c=$('potChip'); if(!c) return; const AB=allBets(), open=AB.filter(b=>b.result==='pending').length, g=CUR;
+  const onG=g?bets.filter(b=>b.game===g||(b.legs||[]).some(l=>l.game===g)):[], gUsd=onG.reduce((a,b)=>a+(betUsd(b)||0),0);   // this sport's bets on the game you have open
+  c.innerHTML=(now!=null?`💰 <b>${fmtUsd(now)}</b>`:'<span class="muted">💰 set your bankroll</span>')+` · <b>${AB.length}</b> bet${AB.length===1?'':'s'} · <b>${open}</b> open`+(onG.length?` · <b>${fmtUsd(gUsd)}</b> on this game`:''); }
 window.addEventListener('storage', e=>{ if(e.key==='nfltd_bank'){ BANK=Object.assign({amt:null, at:0, mt:0}, lsJ('nfltd_bank', {})); renderAll(); } else if(e.key&&e.key!=='nhlp_bets'&&Object.values(SPORT_BETS).includes(e.key)) renderBank(); });
 // ---------- ☁ SYNC — the NFL app's: same token and secret gist (one site, one browser storage), this app's own file in it,
 // so a bet logged on the phone shows on the PC. Records carry mt (newest edit wins); deletions are tombstones; the pot
@@ -572,11 +579,18 @@ function renderBets(){
   const body=$('betBody'); renderBank();
   if(!bets.length){ body.innerHTML='<div class="muted">No bets yet. Log picks from the card or the 📓 buttons — results and CLV fill themselves in.</div>'; return; }
   const g=v=>v>0?'ev-pos':(v<0?'ev-neg':''), sgn=v=>(v>=0?'+':'')+v, pc=v=>sgn((v*100).toFixed(1))+'%', usdOn=!!BANK.amt, mny=v=>usdOn?(v>=0?'+':'')+fmtUsd(v):sgn(v.toFixed(2))+'u', amt=v=>usdOn?fmtUsd(v):v.toFixed(1)+'u';
+  const cg=v=>v>0?'ev-pos':v<0?'clv-bad':'', plPill=v=>`<span class="plpill ${v>0.004?'pos':v<-0.004?'neg':'zero'}">${mny(v)}</span>`;   // red = worse than the close; the pill = money won / lost
+  const amtAny=b=>usdOn?(betUsd(b)||0):(+b.stake||0), plAny=b=>{ const d=oddsDec(b.odds)||1, u=amtAny(b); return b.result==='win'?u*(d-1):b.result==='loss'?-u:b.result==='push'?0:null; };
+  // which sportsbook has made the most — every sport's settled bets (one pot)
+  const BK=(()=>{ const m=new Map(); for(const b of allBets()){ if(!['win','loss','push'].includes(b.result)) continue; const k=b.book||'fanduel', o=m.get(k)||m.set(k,{k,n:0,w:0,l:0,st:0,pl:0,cs:0,cn:0}).get(k);
+      o.n++; if(b.result==='win') o.w++; if(b.result==='loss') o.l++; if(b.result!=='push') o.st+=amtAny(b); o.pl+=plAny(b)||0; const d1=oddsDec(b.odds), d2=oddsDec(b.closeOdds); if(d1&&d2){ o.cs+=d1/d2-1; o.cn++; } }
+    return [...m.values()].sort((x,y)=>y.pl-x.pl); })();
+  const bkTable=BK.length?`<table class="bkstat"><thead><tr><th class="l">Sportsbook</th><th>Bets</th><th>Record</th><th>Staked</th><th>Won / lost</th><th>ROI</th><th>CLV</th></tr></thead><tbody>${BK.map(o=>`<tr><td class="l"><b>${esc(bookName(o.k))}</b></td><td>${o.n}</td><td>${o.w}-${o.l}</td><td>${usdOn?fmtUsd(o.st):o.st.toFixed(1)+'u'}</td><td>${plPill(o.pl)}</td><td class="${o.st?(o.pl>0?'ev-pos':o.pl<0?'clv-bad':''):''}">${o.st?((o.pl/o.st>=0?'+':'')+(o.pl/o.st*100).toFixed(1)+'%'):'—'}</td><td class="${o.cn?cg(o.cs/o.cn):''}">${o.cn?((o.cs>=0?'+':'')+(o.cs/o.cn*100).toFixed(1)+'%'):'—'}</td></tr>`).join('')}</tbody></table>`:'<span class="muted">No settled bets yet.</span>';
   const rows=bets.map(b=>{ const dec=oddsDec(b.odds), cd=oddsDec(b.closeOdds), nd=!cd&&b.cur&&b.cur.q?oddsDec(b.cur.q):null;
     return {b, clv:dec&&cd?dec/cd-1:null, live:dec&&nd?dec/nd-1:null, stk:usdOn?(betUsd(b)||0):(+b.stake||0), pl:betPl(b)}; });
   const agg=R=>{ let w=0,l=0,p=0,st=0,net=0,cs=0,cn=0,cp=0,open=0,spent=0,riding=0; for(const r of R){ const x=r.b.result; spent+=r.stk; if(x==='win'||x==='loss'){ x==='win'?w++:l++; st+=r.stk; net+=r.pl||0; } else if(x==='push') p++; else { open++; riding+=r.stk; } if(r.clv!=null){ cs+=r.clv; cn++; if(r.clv>0) cp++; } }
     return {n:R.length,w,l,p,net,spent,riding,roi:st?net/st:null,clv:cn?cs/cn:null,cn,cp,open}; }, rec=a=>`${a.w}-${a.l}${a.p?'-'+a.p:''}`, A=agg(rows);
-  let html=`<div class="logsum"><span>Record <b>${rec(A)}</b></span><span>Spent <b>${amt(A.spent)}</b></span><span>Won/lost <b class="${g(A.net)}">${mny(A.net)}</b></span><span>ROI <b class="${g(A.roi)}">${A.roi==null?'—':pc(A.roi)}</b></span>`+
+  let html=`<div class="logsum"><span>Record <b>${rec(A)}</b></span>${BK.length>1?`<span title="every sport's settled bets, by the book they were placed at">🏆 Best book <b>${esc(bookName(BK[0].k))}</b> ${plPill(BK[0].pl)}</span>`:''}<span>Spent <b>${amt(A.spent)}</b></span><span>Won/lost ${plPill(A.net)}</span><span>ROI <b class="${g(A.roi)}">${A.roi==null?'—':pc(A.roi)}</b></span>`+
     `<span title="how much better your price was than the closing price">CLV <b class="${g(A.clv)}">${A.clv==null?'—':pc(A.clv)}</b>${A.cn?` <span class="muted">(${Math.round(A.cp/A.cn*100)}% beat the close)</span>`:''}</span>${A.open?`<span><b>${A.open}</b> open</span>`:''}</div>`;
   // weeks (Monday -> Sunday) -> nights -> bets, like the NFL app's weeks -> games: each week opens with its money line;
   // nights start collapsed and tonight's is marked
@@ -587,19 +601,20 @@ function renderBets(){
   const upTo=new Map(); { let sp=0, nt=0; for(const w of [...weeks.keys()].sort((a,b)=>a-b)){ const a=agg(weeks.get(w)); sp+=a.spent; nt+=a.net; upTo.set(w,{spent:sp, net:nt}); } }
   const table=R=>`<div class="scroll"><table><thead><tr><th class="l">Bet</th><th>Odds</th><th>Close · CLV</th><th>Stake</th><th>Result</th><th>P/L</th><th></th></tr></thead><tbody>`+
       R.map(({b,clv,live,pl})=>{ const mine=+String(b.market).split('|')[3], moved=b.cur&&b.cur.l!=null&&b.cur.l!==mine, arrow=moved?(b.cur.l<mine?'▼':'▲')+b.cur.l+' ':'';
-        const clvTxt=clv!=null?` <b class="${g(clv)}">${pc(clv)}</b>${b.closeEst?'<span class="muted" title="the line moved — this is the equivalent price at your line"> ≈</span>':''}`:b.result!=='pending'||!b.cur?'':live!=null?` <span class="${g(live)}" style="font-size:12px;opacity:.85" title="${esc((moved?`the line moved to ${b.cur.l} (${b.cur.o}) — about ${b.cur.q} at your line. `:`now ${b.cur.q}. `)+'A live read, not final until the close.')}">${arrow}≈${pc(live)}</span>`:moved?` <span class="muted" style="font-size:12px">${arrow}</span>`:'';
+        const sideOf=String(b.market).split('|')[2], against=moved&&((sideOf==='U'&&b.cur.l>mine)||(sideOf==='O'&&b.cur.l<mine)), arrowH=moved?`<span class="${against?'clv-bad':'ev-pos'}" title="${against?'the line moved against your bet':'the line moved your way'}">${arrow.trim()}</span> `:'';
+        const clvTxt=clv!=null?` <b class="${cg(clv)}">${pc(clv)}</b>${b.closeEst?'<span class="muted" title="the line moved — this is the equivalent price at your line"> ≈</span>':''}`:b.result!=='pending'||!b.cur?'':live!=null?` <span class="${cg(live)}" style="font-size:12px" title="${esc((moved?`the line moved to ${b.cur.l} (${b.cur.o}) — about ${b.cur.q} at your line. `:`now ${b.cur.q}. `)+'A live read, not final until the close.')}">${arrowH}<span class="muted">≈ ${esc(b.cur.q)} ${moved?'at your '+mine:'now'} ·</span> ${pc(live)}</span>`:moved?` <span style="font-size:12px">${arrowH}</span>`:'';
         return `<tr><td class="l"><b title="chance when logged: ${b.modelProb!=null?pct(b.modelProb):'—'}">${esc(b.player)}</b> <span class="muted">${mktLabel(b.market)} · ${esc(fmtGame(b.game))}</span>${b.offBoard&&b.result==='pending'?' <span style="color:var(--warn);font-size:12px" title="your book no longer offers this prop">⚠ off the board</span>':''}</td>`+
           `<td class="odds">${esc(b.odds)}${bkBadge(b.book)}</td><td><input class="betclose" data-id="${b.id}" value="${esc(b.closeOdds||'')}" placeholder="close" style="width:62px;font-family:var(--mono);font-size:13px;text-align:right">${clvTxt}</td>`+
           `<td title="${b.stake}u">${betStakeTxt(b)}</td><td><select class="betres ss" data-id="${b.id}">${['pending','win','loss','push'].map(x=>`<option${x===b.result?' selected':''}>${x}</option>`).join('')}</select>${b.auto&&b.result!=='pending'?` <span title="${esc('settled from ESPN: '+b.auto)}">🤖</span>`:''}${b.result==='pending'&&b.autoNote?` <span title="${esc(b.autoNote)}" style="cursor:help">✋</span>`:''}</td>`+
           `<td class="${pl!=null?g(pl):''}">${pl==null?'—':mny(pl)}</td><td><button class="ss betdel" data-id="${b.id}" style="color:var(--warn)">✕</button></td></tr>`; }).join('')+`</tbody></table></div>`;
   [...weeks.keys()].sort((a,b)=>b-a).forEach((ws,wi)=>{ const R=weeks.get(ws), a=agg(R), wOpen=LOGOPEN.has('W'+ws)?LOGOPEN.get('W'+ws):(wi===0||a.open>0);
-    html+=`<details class="weekgrp" data-w="${ws}"${wOpen?' open':''}><summary><b>Week of ${fmtD(ws)}</b> <span class="muted">· ${a.n} bet${a.n>1?'s':''}${a.open?` · ${a.open} open`:''}${a.w+a.l?` · ${rec(a)}`:''}</span>${a.clv!=null?` <span class="muted">· CLV</span> <b class="${g(a.clv)}">${pc(a.clv)}</b>`:''}`+
-      `<span class="wktally">💵 Spent <b>${amt(a.spent)}</b> · Won/lost <b class="${g(a.net)}">${a.w+a.l?mny(a.net):'—'}</b>${a.riding?` · <span class="muted">${amt(a.riding)} still riding</span>`:''}<span class="muted"> · season so far: spent ${amt(upTo.get(ws).spent)}, <b class="${g(upTo.get(ws).net)}">${mny(upTo.get(ws).net)}</b></span></span></summary><div class="wkbody">`;
+    html+=`<details class="weekgrp" data-w="${ws}"${wOpen?' open':''}><summary><b>Week of ${fmtD(ws)}</b>${a.w+a.l?plPill(a.net):''} <span class="muted">· ${a.n} bet${a.n>1?'s':''}${a.open?` · ${a.open} open`:''}${a.w+a.l?` · ${rec(a)}`:''}</span>${a.clv!=null?` <span class="muted">· CLV</span> <b class="${g(a.clv)}">${pc(a.clv)}</b>`:''}`+
+      `<span class="wktally">💵 Spent <b>${amt(a.spent)}</b>${a.riding?` · <span class="muted">${amt(a.riding)} still riding</span>`:''}</span></summary><div class="wkbody">`;
     const days=new Map(); for(const r of R){ const k=dayOf(r.b); (days.get(k)||days.set(k,[]).get(k)).push(r); }
     [...days.keys()].sort((x,y)=>y-x).forEach(dk=>{ const D=days.get(dk), da=agg(D), open=LOGOPEN.has(dk)?LOGOPEN.get(dk):false;
       html+=`<details class="daygrp${dk===tonight?' curday':''}" data-d="${dk}"${open?' open':''}><summary><b>${new Date(dk).toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'})}</b> <span class="muted">· ${da.n} bet${da.n>1?'s':''}${da.open?` · ${da.open} open`:''}${da.w+da.l?` · ${rec(da)}`:''} · spent ${amt(da.spent)}</span>${da.w+da.l?` <b class="${g(da.net)}">${mny(da.net)}</b>`:''}</summary>`+table(D)+'</details>'; });
     html+='</div></details>'; });
-  body.innerHTML=html;
+  body.innerHTML=html; const bs=$('bookStats'); if(bs) bs.innerHTML=bkTable;
 }
 function renderTest(){ const bt=M.backtest||{}; $('testNote').innerHTML=`<b>How the simulator was tested.</b> Every game of the ${M.test-1}-${String(M.test).slice(2)} season, using only what was known before puck drop (settings learned on ${M.train-1}-${String(M.train).slice(2)}; tonight's starting goalie treated as known, as it is announced before the game). Each bet was a book-like line — shots at his season average on the half shot, goals and points at 0.5 — scored separately on the two halves of the season:`+
   `<div class="scroll"><table style="margin-top:6px;max-width:620px"><thead><tr><th class="l">Bet</th><th>Player-games</th><th>Simulator</th><th>Season average</th></tr></thead><tbody>`+
