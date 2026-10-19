@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>NHL Prop Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<script>try{ if(localStorage.getItem('sims_theme')==='dim') document.documentElement.dataset.theme='dim'; }catch(e){}</script>
 <style>
   :root{--bg:#0a0e13;--panel:#121923;--panel2:#18212d;--line:#1d2836;--line2:#2a3849;--ink:#e8eef6;--ink2:#a8b6c7;--ink3:#7c8b9d;--accent:#4da3ff;--good:#34d399;--bad:#f87171;--warn:#fbbf24;--mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
   *{box-sizing:border-box}
@@ -27,7 +30,10 @@
   .ss{background:var(--panel2);color:var(--ink);border:1px solid var(--line2);border-radius:8px;padding:3px 9px;font-size:12px;text-decoration:none;display:inline-block}
   .book{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;align-items:start}
   .bmain{min-width:0;container-type:inline-size}
-  @media(min-width:1200px){ .book{grid-template-columns:minmax(0,1fr) 360px} .bslip{grid-column:2;grid-row:1;position:sticky;top:8px;max-height:calc(100vh - 16px);overflow-y:auto;scrollbar-width:thin} .bmain{grid-column:1;grid-row:1} }
+  /* tabs at every width (sections carry data-m); a side column only on the bet log (bankroll beside it) */
+  body[data-mtab="card"] [data-m]:not([data-m="card"]),body[data-mtab="games"] [data-m]:not([data-m="games"]),body[data-mtab="priced"] [data-m]:not([data-m="priced"]),body[data-mtab="bets"] [data-m]:not([data-m="bets"]){display:none!important}
+  @media(min-width:1200px){ body[data-mtab="bets"] .book{grid-template-columns:minmax(0,1fr) 380px} body[data-mtab="bets"] .bslip{grid-column:2;grid-row:1;position:sticky;top:calc(var(--navh,64px) + 12px)} body[data-mtab="bets"] .bmain{grid-column:1;grid-row:1} }
+  body[data-mtab="card"] .bmain,body[data-mtab="games"] .bslip,body[data-mtab="priced"] .bslip{display:none}
   .bslip h2:first-child{margin-top:0}
   /* sport switcher (one site, one pot: NFL · NBA · NHL) */
   .sportbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 12px}
@@ -86,18 +92,149 @@
     .mtabbar button{flex:1;background:none;border:none;color:var(--ink3);font-size:11px;font-weight:800;padding:3px 0;display:flex;flex-direction:column;align-items:center;gap:1px}
     .mtabbar button span{font-size:19px;line-height:1.1}
     .mtabbar button.on{color:var(--accent)}
-    body[data-mtab="card"] [data-m]:not([data-m="card"]),body[data-mtab="games"] [data-m]:not([data-m="games"]),body[data-mtab="priced"] [data-m]:not([data-m="priced"]),body[data-mtab="bets"] [data-m]:not([data-m="bets"]){display:none!important}
   }
+
+  /* ===== Prop Sims look (one look for 🏈 🏀 🏒): light by default, 🌙 dim; Inter · Space Grotesk · JetBrains Mono ===== */
+  :root{
+    --bg:#eef2f8; --panel:#ffffff; --panel2:#f4f7fb; --line:#e2e8f0; --line2:#d2dbe7;
+    --ink:#0f1726; --ink2:#3b485c; --ink3:#66758b;
+    --good:#0b9a5e; --goodbg:#e2f5eb; --bad:#d93a48; --warn:#a86f00; --star:#c98a00;
+    --accent:#2f6fe4; --accent2:#6a55f0; --onacc:#ffffff; --ongood:#ffffff;
+    --topbg:rgba(255,255,255,.86); --hover:rgba(47,111,228,.05);
+    --shadow:0 1px 2px rgba(15,23,38,.05), 0 10px 28px -16px rgba(15,23,38,.22);
+    --sans:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --head:"Space Grotesk",Inter,system-ui,sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --radius:16px;
+  }
+  :root[data-theme="dim"]{
+    --bg:#121822; --panel:#1b2332; --panel2:#232d40; --line:#2b3649; --line2:#38465e;
+    --ink:#eef3fa; --ink2:#b6c2d4; --ink3:#8b99ae;
+    --good:#2fd38c; --goodbg:#10291f; --bad:#ff6b6b; --warn:#ffc24b; --star:#ffd54a;
+    --accent:#5aa2ff; --accent2:#8f84ff; --onacc:#06121f; --ongood:#06121f;
+    --topbg:rgba(18,24,34,.86); --hover:rgba(90,162,255,.07);
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 12px 30px -16px rgba(0,0,0,.65);
+  }
+  html,body{background:var(--bg)}
+  body{font-family:var(--sans);font-size:16px;line-height:1.5;color:var(--ink);-webkit-font-smoothing:antialiased;min-height:100vh;
+    background:radial-gradient(1100px 520px at 0% -8%,rgba(47,111,228,.10),transparent 60%),radial-gradient(900px 480px at 100% 0%,rgba(106,85,240,.08),transparent 60%),var(--bg);background-attachment:fixed}
+  a{color:var(--accent)}
+  .wrap{max-width:1440px;margin:0 auto;padding:20px clamp(14px,2.6vw,32px) 90px}
+  h1{font-family:var(--head)}
+  h2{font-family:var(--head);font-size:19px;font-weight:700;text-transform:none;letter-spacing:-.2px;color:var(--ink);margin:26px 0 12px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}
+  .note{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--warn);border-radius:14px;box-shadow:var(--shadow);color:var(--ink2)}
+  .note.info{border-left-color:var(--accent)}
+  input,select,textarea,button{font-family:var(--sans)}
+  select,input[type=number],input[type=text],input[type=password],textarea{background:var(--panel2);color:var(--ink);border:1px solid var(--line2);border-radius:10px}
+  .btn{background:linear-gradient(135deg,var(--accent),var(--accent2));color:var(--onacc);border:0;border-radius:12px;font-weight:700;box-shadow:0 8px 22px -12px var(--accent)}
+  .btn.sec{background:var(--panel2);color:var(--ink);border:1px solid var(--line2);box-shadow:none}
+  .statussel,.ss{background:var(--panel);color:var(--ink);border:1px solid var(--line2);border-radius:10px;font-weight:600}
+  .statussel:hover,.ss:hover{border-color:var(--accent)}
+  a.statussel,a.ss{color:var(--accent);text-decoration:none}
+  .muted{color:var(--ink3)}
+  table{font-variant-numeric:tabular-nums}
+  th{color:var(--ink3);background:var(--panel)}
+  td{border-bottom:1px solid var(--line)}
+  tbody tr:hover td{background:var(--hover)}
+  .odds{font-family:var(--mono);font-weight:600}
+  .mktbtn.active,.mtab.active,.tab.on{background:var(--accent);color:var(--onacc);border-color:var(--accent)}
+  .vb-take{background:var(--good);color:var(--ongood);border-color:var(--good)}
+  .newtag{background:var(--accent);color:var(--onacc);font-size:10.5px;font-weight:900;letter-spacing:.07em;border-radius:6px;padding:2px 7px;flex:0 0 auto}
+  .bktag{font-family:var(--sans)}
+  .cardstat{font-family:var(--head);font-size:16px;border-radius:12px;padding:9px 14px}
+  .logsum{background:var(--panel2);border-color:var(--line2);font-size:14px}
+  :root:not([data-theme="dim"]) .pos-weak,:root:not([data-theme="dim"]) .snaptag.low{color:#b85f00;border-color:rgba(184,95,0,.4);background:rgba(184,95,0,.08)}
+  /* top bar: brand · sports · the pot · theme, then the tabs */
+  .topbar{position:sticky;top:0;z-index:70;background:var(--topbg);backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);border-bottom:1px solid var(--line)}
+  .topin{max-width:1440px;margin:0 auto;padding:10px clamp(14px,2.6vw,32px) 6px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:9px;font-family:var(--head);font-weight:700;font-size:20px;letter-spacing:-.3px;color:var(--ink);text-decoration:none;white-space:nowrap}
+  .brand i{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent2));box-shadow:0 6px 16px -6px var(--accent)}
+  .topbar .sportbar{display:flex;gap:4px;margin:0;padding:4px;background:var(--panel2);border:1px solid var(--line);border-radius:999px;flex-wrap:nowrap}
+  .topbar .sportbar a{padding:6px 14px;border:0;border-radius:999px;background:none;color:var(--ink2);font-weight:700;font-size:14px;text-decoration:none;white-space:nowrap}
+  .topbar .sportbar a.on{background:var(--ink);color:var(--bg)}
+  .pot{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:5px 12px;line-height:1.2;min-width:64px}
+  .stat small{display:block;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3);white-space:nowrap}
+  .stat b{font-family:var(--mono);font-size:16px;font-weight:700;color:var(--ink);white-space:nowrap}
+  .stat.big b{font-size:18px}
+  .stat .up{color:var(--good)} .stat .dn{color:var(--bad)}
+  .themebtn{border:1px solid var(--line2);background:var(--panel);color:var(--ink2);border-radius:999px;width:36px;height:36px;font-size:16px;cursor:pointer;flex:0 0 auto;padding:0}
+  .dtabs{max-width:1440px;margin:0 auto;padding:0 clamp(14px,2.6vw,32px);display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
+  .dtabs::-webkit-scrollbar{display:none}
+  .dtabs button{background:none;border:0;border-bottom:2px solid transparent;padding:8px 14px 10px;font-weight:700;font-size:15px;color:var(--ink3);cursor:pointer;white-space:nowrap}
+  .dtabs button:hover{color:var(--ink)}
+  .dtabs button.on{color:var(--ink);border-bottom-color:var(--accent)}
+  .vh{display:none!important}
+  /* the pull: one big button */
+  .hero{background:linear-gradient(135deg,rgba(47,111,228,.12),rgba(106,85,240,.08)),var(--panel);border:1px solid rgba(47,111,228,.30);border-radius:22px;padding:18px 20px;box-shadow:var(--shadow)}
+  .herorow{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .herorow>div:not(.herometa){flex:1 1 320px;min-width:0}
+  select.statussel,select.ss{width:auto}
+  .hero .btn.big{font-size:17px;padding:14px 26px;border-radius:14px}
+  .herot{font-family:var(--head);font-size:22px;font-weight:700;letter-spacing:-.3px;line-height:1.25}
+  .herometa{margin-left:auto;text-align:right;font-size:13px;color:var(--ink3);line-height:1.5}
+  .hero details>summary{color:var(--ink3)}
+  /* the bets to take, as cards */
+  .bacts{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:2px 0 4px}
+  .bacts .statussel,.bacts .ss{padding:9px 15px!important;font-size:14px;border-radius:11px}
+  .bgame{display:flex;align-items:center;gap:10px;margin:18px 0 9px;font-size:12.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3)}
+  .bgame:after{content:"";flex:1;height:1px;background:var(--line2)}
+  .bcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px;margin-top:10px}
+  .bgame+.bcards{margin-top:0}
+  .bcard{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:13px 15px 12px 19px;box-shadow:var(--shadow);overflow:hidden;transition:transform .12s ease,border-color .12s ease}
+  .bcard.spick{cursor:pointer}
+  .bcard:hover{transform:translateY(-2px);border-color:var(--line2)}
+  .bcard:before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--tc,var(--accent))}
+  .bcard.new{border-color:rgba(47,111,228,.55);box-shadow:0 0 0 1px rgba(47,111,228,.2) inset,var(--shadow)}
+  .bcard.done{opacity:.62}
+  .bc1{display:flex;align-items:center;gap:8px;min-width:0}
+  .bcwho{font-weight:800;font-size:17px;letter-spacing:-.2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+  .bc1>.conf,.bc1>.vbadge{margin-left:auto;flex:0 0 auto}
+  .bcin{font-size:10.5px;font-weight:800;letter-spacing:.06em;color:var(--good);border:1px solid var(--good);border-radius:6px;padding:1px 6px;flex:0 0 auto}
+  .bcmkt{color:var(--ink2);font-size:14px;margin-top:1px}
+  .bc2{display:flex;align-items:flex-end;gap:10px;margin-top:8px}
+  .bcodds{font-family:var(--mono);font-weight:700;font-size:24px;letter-spacing:-.5px;line-height:1}
+  .bcodds .bktag{vertical-align:5px;margin-left:6px;font-size:10.5px}
+  .bcbet{margin-left:auto;text-align:right;line-height:1.1}
+  .bcbet small{display:block;font-size:10.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3)}
+  .bcbet b{font-family:var(--mono);font-size:21px;color:var(--good)}
+  .bcard.done .bcbet b{color:var(--ink2)}
+  .bcbar{margin-top:11px;height:6px;border-radius:99px;background:var(--line);position:relative;overflow:hidden}
+  .bcbar i{position:absolute;left:0;top:0;bottom:0;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--accent2))}
+  .bcbar u{position:absolute;top:0;bottom:0;width:2px;background:var(--ink)}
+  .bcwhy{display:flex;justify-content:space-between;gap:8px;margin-top:5px;font-size:12.5px;color:var(--ink3)}
+  .bcwhy b{font-family:var(--mono);font-weight:600;color:var(--ink2)}
+  .bcwhy b.ev-pos{color:var(--good)}
+  .bclink{margin-top:9px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .bclink .statussel,.bclink .ss{font-size:13px;padding:5px 11px!important}
+  @media(max-width:760px){
+    .topin{gap:8px;padding:8px 12px}
+    .brand{font-size:17px} .brand i{width:22px;height:22px}
+    .themebtn{order:2;margin-left:auto;width:32px;height:32px;font-size:14px}
+    .topbar .sportbar{order:3;width:100%} .topbar .sportbar a{flex:1;text-align:center;padding:6px 4px}
+    .pot{order:4;margin-left:0;width:100%;flex-wrap:nowrap;gap:6px}
+    .stat{flex:1 1 0;min-width:0;padding:4px 7px} .stat small{font-size:9px;letter-spacing:.03em;overflow:hidden;text-overflow:ellipsis} .stat b,.stat.big b{font-size:14px}
+    .dtabs{display:none}
+    .mtabbar{background:var(--topbg)!important;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+    .wrap{padding:12px 12px 90px}
+    .hero{padding:14px;border-radius:18px} .hero .btn.big{width:100%} .herometa{margin-left:0;text-align:left} .herot{font-size:19px}
+    .bcards{grid-template-columns:1fr} .herodesc{display:none}
+    h2{font-size:17px;margin-top:18px}
+  }
+  select.ss{width:auto}
 </style>
 </head>
 <body>
+<header class="topbar" id="topbar"><div class="topin">
+  <a class="brand" href="../" title="Prop Sims — all three sports"><i></i>Prop Sims</a>
+  <nav class="sportbar" id="sportBar"><a href="../nfl-td-predictor/">🏈 NFL</a><a href="../nba-prop-predictor/">🏀 NBA</a><a href="../nhl-prop-predictor/" class="on">🏒 NHL</a></nav>
+  <div class="pot" id="potChip"></div>
+  <button class="themebtn" id="themeBtn" title="switch to dim">🌙</button>
+</div>
+<nav class="dtabs" id="dtabs"><button data-t="card">⚡ Bets</button><button data-t="games">🏒 Games</button><button data-t="priced">★ Priced</button><button data-t="bets">📓 Bet log</button></nav>
+</header>
 <div class="wrap">
-  <nav class="sportbar" id="sportBar"><a href="../nfl-td-predictor/">🏈 NFL</a><a href="../nba-prop-predictor/">🏀 NBA</a><a href="../nhl-prop-predictor/" class="on">🏒 NHL</a><span class="pot" id="potChip"></span></nav>
-  <header class="top">
-    <h1>🏒 NHL Prop Simulator</h1>
-    <span id="slateLbl" class="muted"></span>
-    <span class="muted" style="margin-left:auto;font-size:12px" id="builtLbl"></span>
-  </header>
   <div class="book">
     <aside class="bslip">
       <h2 data-m="bets">Bankroll</h2>
@@ -110,14 +247,14 @@
         <div id="bankNote" class="muted" style="font-size:12px;margin-top:6px"></div>
       </div>
 
-      <h2 data-m="card">Odds</h2>
-      <div class="panel" data-m="card">
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-          <button class="btn" id="pullAll">⚡ Pull tonight</button>
-          <span id="pullMsg" class="muted" style="font-size:12px"></span>
-          <span id="oddsLeft" class="muted" style="font-size:11px;margin-left:auto"></span>
+      <h2 class="vh" data-m="card">Odds</h2>
+      <div class="hero" data-m="card">
+        <div class="herorow">
+          <button class="btn big" id="pullAll">⚡ Pull tonight</button>
+          <div><div class="herot" id="slateLbl"></div><div class="muted herodesc" style="font-size:13.5px">Every game tonight, every market you've ticked — the best few bets across all of them, with links that open them in your book.</div><div id="pullMsg" class="muted" style="font-size:13px"></div></div>
+          <div class="herometa"><span id="oddsLeft"></span><br><span id="builtLbl"></span></div>
         </div>
-        <details id="oddsCfg" style="margin-top:8px;font-size:12px"><summary class="muted" style="cursor:pointer">odds settings</summary>
+        <details id="oddsCfg" style="margin-top:10px;font-size:13px"><summary class="muted" style="cursor:pointer">odds settings</summary>
           <div style="margin-top:6px;display:flex;flex-direction:column;gap:7px;line-height:1.5">
             <div>The Odds API key <input id="oddsKeyIn" type="password" placeholder="paste key" autocomplete="off" spellcheck="false" style="width:160px;font-size:12px"> <button class="ss" id="oddsKeySave">save</button> <span id="oddsKeyMsg" class="muted"></span></div>
             <div><b>My sportsbooks</b> <span class="muted">— you see the best price among these; every other book is "the market"</span><br>
@@ -131,12 +268,10 @@
         </details>
       </div>
 
-      <h2 data-m="card">Tonight's card</h2>
-      <div class="panel" id="cardPanel" data-m="card">
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12px" class="muted">
-          <label>Show <select id="cardN" class="ss"><option>3</option><option selected>5</option><option>8</option></select> bets</label>
-        </div>
-        <div id="cardBody" style="margin-top:6px"></div>
+      <h2 class="vh" data-m="card">Tonight's card</h2>
+      <div id="cardPanel" data-m="card" style="margin-top:14px">
+        <div id="cardBody"></div>
+        <div class="muted" style="font-size:13px;margin-top:14px"><label>Show up to <select id="cardN" class="ss"><option>3</option><option selected>5</option><option>8</option></select> bets a night</label></div>
       </div>
     </aside>
 
@@ -187,7 +322,7 @@
     </div>
   </div>
 </div>
-<nav class="mtabbar" id="mtabbar"><button data-t="card"><span>🎯</span>Card</button><button data-t="games"><span>🏒</span>Games</button><button data-t="priced"><span>★</span>Priced</button><button data-t="bets"><span>📓</span>Bets</button></nav>
+<nav class="mtabbar" id="mtabbar"><button data-t="card"><span>⚡</span>Bets</button><button data-t="games"><span>🏒</span>Games</button><button data-t="priced"><span>★</span>Priced</button><button data-t="bets"><span>📓</span>Log</button></nav>
 
 <script>/*__SNAPSHOT__*/</script>
 <script>
@@ -212,7 +347,7 @@ const mktLabel=m=>{ const [,s,side,l]=String(m).split('|'); if(m==='custom') ret
 const teamColor=a=>(S.teams[a]&&S.teams[a].color)||'#666';
 // readable name color on the dark page: the team color, else its alternate, else plain text (Boston's is nearly black)
 const lum=c=>{ const n=parseInt(String(c||'#000').slice(1),16)||0; return (0.299*(n>>16)+0.587*((n>>8)&255)+0.114*(n&255))/255; };
-const teamText=a=>{ const t=S.teams[a]; if(!t) return 'var(--ink)'; return lum(t.color)>0.35?t.color:lum(t.alt)>0.35?t.alt:'var(--ink)'; };
+const teamText=a=>{ const t=S.teams[a]; if(!t) return 'var(--ink)'; return isDim()?(lum(t.color)>0.35?t.color:lum(t.alt)>0.35?t.alt:'var(--ink)'):(lum(t.color)<0.6?t.color:lum(t.alt)<0.6?t.alt:'var(--ink)'); };
 const fmtGame=g=>{ const [a,h]=String(g).split('@'); const sh=x=>S.teams[x]?S.teams[x].short:x; return sh(a)+' @ '+sh(h); };
 
 // ---------------------------------------------------------------- the model (a copy of the build's — keep identical)
@@ -308,7 +443,13 @@ function renderBank(){ const inp=$('bankUsd'), now=bankNow(); if(document.active
   $('bankNote').innerHTML=`<b>One pot</b> for 🏈 🏀 🏒 — 1 unit = 1% = <b>${fmtUsd(unitUsd())}</b>.${open.length?` <b>${fmtUsd(risk)}</b> riding on ${open.length} open bet${open.length>1?'s':''}.`:''} Deposited or withdrew? Type the new balance.`; }
 function renderPotChip(now){ const c=$('potChip'); if(!c) return; const AB=allBets(), open=AB.filter(b=>b.result==='pending').length, g=CUR;
   const onG=g?bets.filter(b=>b.game===g||(b.legs||[]).some(l=>l.game===g)):[], gUsd=onG.reduce((a,b)=>a+(betUsd(b)||0),0);   // this sport's bets on the game you have open
-  c.innerHTML=(now!=null?`💰 <b>${fmtUsd(now)}</b>`:'<span class="muted">💰 set your bankroll</span>')+` · <b>${AB.length}</b> bet${AB.length===1?'':'s'} · <b>${open}</b> open`+(onG.length?` · <b>${fmtUsd(gUsd)}</b> on this game`:''); }
+  const mon=(d=>{ d.setHours(0,0,0,0); d.setDate(d.getDate()-((d.getDay()+6)%7)); return d.getTime(); })(new Date());
+  const W=AB.filter(b=>b.st>=mon&&['win','loss','push'].includes(b.result)), wpl=W.reduce((a,b)=>a+(betPl(b)||0),0);   // settled since Monday, every sport
+  const st=(cls,lbl,v,tip)=>`<div class="stat ${cls}" title="${tip}"><small>${lbl}</small><b>${v}</b></div>`;
+  c.innerHTML=st('big','Bankroll', now!=null?fmtUsd(now):'<span class="muted">set it</span>', 'one pot for NFL, NBA and NHL')+
+    (now!=null&&W.length?st('','This week', `<span class="${wpl>0.004?'up':wpl<-0.004?'dn':''}">${wpl>=0?'+':''}${fmtUsd(wpl)}</span>`, 'won / lost on bets settled since Monday — every sport'):'')+
+    st('','Bets', AB.length, 'every bet you\'ve logged — NFL, NBA and NHL')+st('','Open', open, 'bets still waiting on a result — every sport')+
+    (onG.length?st('','This game', fmtUsd(gUsd), 'staked on the game you have open'):''); }
 window.addEventListener('storage', e=>{ if(e.key==='nfltd_bank'){ BANK=Object.assign({amt:null, at:0, mt:0}, lsJ('nfltd_bank', {})); renderAll(); } else if(e.key&&e.key!=='nhlp_bets'&&Object.values(SPORT_BETS).includes(e.key)) renderBank(); });
 // ---------- ☁ SYNC — the NFL app's: same token and secret gist (one site, one browser storage), this app's own file in it,
 // so a bet logged on the phone shows on the PC. Records carry mt (newest edit wins); deletions are tombstones; the pot
@@ -559,18 +700,28 @@ function renderBoard(){
     : `<tr><td class="l muted" colspan="9">${all.length?'No price with an edge right now — tick the box to see them all.':'Nothing pulled yet. ⚡ Pull tonight (or one game) to fill this.'}</td></tr>`;
 }
 const cardStat=(cls,big,small)=>`<div class="cardstat ${cls}">${big}${small?` <span>${small}</span>`:''}</div>`;
+function isDim(){ return document.documentElement.dataset.theme==='dim'; }   // the 🌙 look (light is the default)
+function betCard(o){ const w=x=>Math.max(0,Math.min(100,x*100)).toFixed(1);
+  return `<article class="bcard ${o.nw?'new':'done'} ${o.cls||''}" style="--tc:${o.tc}" ${o.attrs||''}>`+
+    `<div class="bc1"><span class="bcwho">${esc(o.name)}</span>${o.nw?'<span class="newtag">NEW</span>':'<span class="bcin">✓ IN LOG</span>'}${o.conf||''}</div>`+
+    `<div class="bcmkt">${o.mkt}${o.sub?` <span class="muted">· ${o.sub}</span>`:''}</div>`+
+    `<div class="bc2"><span class="bcodds">${esc(o.odds)}${bkBadge(o.book)}</span><span class="bcbet"><small>${o.nw?'Bet':'Logged'}</small><b>${stakeTxt(o.stake)}</b></span></div>`+
+    (o.mp!=null&&o.bimp!=null?`<div class="bcbar" title="bar = its chance (${pct(o.mp)}) · line = the chance the price pays for (${pct(o.bimp)})"><i style="width:${w(o.mp)}%"></i><u style="left:${w(o.bimp)}%"></u></div>`+
+      `<div class="bcwhy"><span>chance <b>${pct(o.mp)}</b> · price <b>${pct(o.bimp)}</b></span>${o.ev!=null?`<span>EV <b class="${o.ev>0?'ev-pos':''}">${o.ev>=0?'+':''}${(o.ev*100).toFixed(1)}%</b></span>`:''}</div>`:'')+
+    (o.note?`<div class="bcwhy">${o.note}</div>`:'')+
+    (o.link?`<div class="bclink">${o.link}</div>`:'')+'</article>'; }
+const tipTime=g=>{ const x=gameOf(g); return x&&x.tip?new Date(x.tip).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}):''; };
 function renderCard(){
   const body=$('cardBody'), any=Object.keys(BOARDS).some(g=>gameOf(g));
   if(!CARD.length){ const open=bets.filter(b=>b.result==='pending'&&gameOf(b.game)).length;
-    body.innerHTML=any?(open?cardStat('done','✅ NO NEW BETS',`you have ${open} open bet${open>1?'s':''} tonight — nothing new clears the bar`):cardStat('none','NO BETS TONIGHT','nothing clears the bar'))+'<div class="muted" style="font-size:13px">Nothing at your books beats what the other books say it\'s worth by enough — that\'s the normal case.</div>'
-      :'<div class="muted" style="font-size:13px">Pull tonight\'s prices and the best few bets across every game show up here, with stakes.</div>'; return; }
+    body.innerHTML=any?(open?cardStat('done','✅ NO NEW BETS',`you have ${open} open bet${open>1?'s':''} tonight — nothing new clears the bar`):cardStat('none','NO BETS TONIGHT','nothing clears the bar'))+'<div class="muted" style="font-size:14px">Nothing at your books beats what the other books say it\'s worth by enough — that\'s the normal case.</div>'
+      :'<div class="muted" style="font-size:14px">Pull tonight\'s prices and the best few bets across every game show up here, with stakes and links.</div>'; return; }
   const tot=CARD.reduce((a,c)=>a+c.stake,0), un=CARD.filter(c=>!c.held), nIn=CARD.length-un.length;
-  body.innerHTML=(un.length?cardStat('new',`🆕 ${un.length} NEW BET${un.length>1?'S':''}`, nIn?`not in your log yet · ${nIn} already logged`:'not in your log yet'):cardStat('done','✅ NO NEW BETS',`${CARD.length>1?'all '+CARD.length+' bets on the card are':'the bet on the card is'} already in your log`))+
-    CARD.map((c,i)=>`<div class="cpick ${c.held?'cdone':'cnew'}"><div class="cp1"><span class="${i?'muted':''}" style="min-width:18px;font-weight:800">${i?(i+1)+'.':'★'}</span><b style="color:${teamText(c.abbr)}">${esc(c.name)}</b>${c.held?'':'<span class="newtag">NEW</span>'}<span class="muted" style="font-size:12px">${esc(fmtGame(c.game))}</span>`+
-      `${c.held?'<span class="muted" style="margin-left:auto;font-size:12px">✓ already bet</span>':`<span class="vb vb-take" style="margin-left:auto">bet ${stakeTxt(c.stake)}</span>`}</div>`+
-      `<div class="cp2">${mktLabel(c.market)} <span class="odds">${esc(c.odds)}</span>${bkBadge(c.book)} ${confBadge(c.conf)} <span class="muted" style="font-size:12px">proj ${c.stat==='goal'?pct(1-Math.exp(-c.mu)):c.mu.toFixed(2)} · ${c.src==='own'?'own':'mkt'} ${pct(c.mkt)} → ${pct(c.mp)} vs ${pct(c.bimp)}</span></div></div>`).join('')+
-    `<div class="muted" style="font-size:12px;margin-top:6px">Tonight <b>${stakeTxt(tot)}</b> (${tot.toFixed(1)}% of bankroll, capped at ${NIGHT_CAP}%)</div>`+
-    `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">${un.length?`<button class="ss" id="cardLog">📓 log ${un.length===CARD.length?'these':'the '+un.length+' new'}</button>`:''}${linkButtons(un.length?un:CARD, 'Open on')}</div>`;
+  body.innerHTML=(un.length?cardStat('new',`🆕 ${un.length} NEW BET${un.length>1?'S':''}`, `${stakeTxt(un.reduce((a,c)=>a+c.stake,0))} to bet${nIn?` · ${nIn} already logged`:''}`):cardStat('done','✅ NO NEW BETS',`${CARD.length>1?'all '+CARD.length+' bets on the card are':'the bet on the card is'} already in your log`))+
+    `<div class="muted" style="font-size:13px;margin:-2px 0 8px">${nIn?`Tonight ${stakeTxt(tot)} in all · `:''}${tot.toFixed(1)}% of bankroll (the cap is ${NIGHT_CAP}%) · best bet first</div>`+
+    `<div class="bacts">${un.length?`<button class="ss" id="cardLog">📓 Log ${un.length===CARD.length?'these '+un.length:'the '+un.length+' new'}</button>`:''}${linkButtons(un.length?un:CARD, 'Open on')}</div>`+
+    `<div class="bcards">`+CARD.map((c,i)=>betCard({nw:!c.held, tc:teamColor(c.abbr), name:(i?'':'★ ')+c.name, mkt:mktLabel(c.market), sub:`${esc(fmtGame(c.game))}${tipTime(c.game)?' · '+tipTime(c.game):''}`, odds:c.odds, book:c.book, stake:c.stake,
+      conf:confBadge(c.conf), mp:c.mp, bimp:c.bimp, ev:c.ev, link:c.held?'':linkButtons([c], 'Open on')})).join('')+'</div>';
   const cl=$('cardLog'); if(cl) cl.onclick=()=>{ let n=0; for(const c of CARD) if(!c.held&&logBet(c, c.stake)) n++; if(n) saveBets(); };
 }
 // ---- bet log: one summary line, then days -> bets
@@ -681,8 +832,16 @@ document.addEventListener('click', e=>{ const b=e.target.closest&&e.target.close
 $('oddsKeyMsg').textContent=oddsKey()?'saved ✓':'';
 $('oddsKeySave').onclick=()=>{ const v=$('oddsKeyIn').value.trim(); try{ if(v) localStorage.setItem('nhlp_oddskey', v); else localStorage.removeItem('nhlp_oddskey'); }catch(e){} $('oddsKeyIn').value=''; $('oddsKeyMsg').textContent=oddsKey()?'saved ✓':'removed'; };
 // phones: one tab at a time
-function showTab(t){ document.body.dataset.mtab=t; document.querySelectorAll('#mtabbar button').forEach(b=>b.classList.toggle('on', b.dataset.t===t)); lsW('nhlp_mtab', t); }
-$('mtabbar').addEventListener('click', e=>{ const b=e.target.closest('button[data-t]'); if(b){ showTab(b.dataset.t); window.scrollTo(0,0); } });
+function showTab(t){ document.body.dataset.mtab=t; document.querySelectorAll('#mtabbar button, #dtabs button').forEach(b=>b.classList.toggle('on', b.dataset.t===t)); lsW('nhlp_mtab', t); }
+for(const id of ['mtabbar','dtabs']) $(id).addEventListener('click', e=>{ const b=e.target.closest('button[data-t]'); if(b){ showTab(b.dataset.t); window.scrollTo(0,0); } });
+const setNavH=()=>document.documentElement.style.setProperty('--navh', $('topbar').offsetHeight+'px'); setNavH(); window.addEventListener('resize', setNavH);
+// ---- look: light (default) or 🌙 dim — one setting for all three sports (same site, same storage)
+function setTheme(v, quiet){ document.documentElement.dataset.theme=v; const B=$('themeBtn'); if(B){ B.textContent=v==='dim'?'☀':'🌙'; B.title=v==='dim'?'switch to light':'switch to dim'; }
+  try{ localStorage.setItem('sims_theme', v); }catch(e){} if(!quiet){ try{ renderAll(); }catch(e){} } }
+setTheme(isDim()?'dim':'light', true);
+$('themeBtn').onclick=()=>setTheme(isDim()?'light':'dim');
+window.addEventListener('storage', e=>{ if(e.key==='sims_theme'&&e.newValue&&e.newValue!==document.documentElement.dataset.theme) setTheme(e.newValue); });
+
 showTab(lsJ('nhlp_mtab','card'));
 
 renderTest(); renderAll(); loadSlate(); loadInjuries(); syncNote();
