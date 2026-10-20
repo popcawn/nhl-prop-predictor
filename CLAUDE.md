@@ -52,6 +52,29 @@ bet-log history). See README.md for the model and its backtest.
 - Phone tab bar: sections carry `data-m` card | games | priced | bets in the HTML.
 - `autoSettle()`: ESPN summary by `b.ev`; keys `shotsTotal` / `goals` / `assists`; a skater not in the box = scratched → void.
 
+## ⚡ Automatic closing prices (2026-10-20 — 16 NHL bets went 5-11 with NO Close on any, so the log had no CLV)
+- The NFL app's rule, ported (NBA has the same code). `autoCloses()` runs 8 s after opened() (after the first sync), every
+  2 min, and on `visibilitychange` (phones pause timers): `autoLiveCloses()` then `autoHistCloses()`.
+- LIVE (AUTO.close, on by default): open bets whose start (SLATE tip, else `b.ko`) is ≤15 min away → `pullGame(g, only the
+  bets' markets)` → `applyBoard(g, board, true)` (b.cur) → `applyClose()` = `closeView()` (the bet's book at the bet's
+  line; a moved line is translated → `closeEst`). 1 credit per market per game. Errors other than key/credits retry next check.
+- HISTORY (AUTO.hist, OPT-IN, off by default): bets with no Close whose game started <14 days ago (pushes/voids skipped) →
+  `histBoard()`: HIST_API `/events?date=start−5min` (1 credit) + `/events/{id}/odds?date=…&bookmakers=myBooks()` (10 per
+  market). Free plan → `nhlp_histoff` pauses 3 days; offline / 401 / 429 → 30-min pause (memory); other errors mark the game 'fail'.
+- Each game|start|market is tried ONCE, live or history (`nhlp_closed`, pruned after 21 days). Both stop at CFG.reserve
+  (no confirm — a note in #autoMsg). `nhlp_auto` {close, hist}; checkboxes #autoCloseChk / #autoHistChk under odds
+  settings, #histCost = "N bets waiting · about C credits" (what ticking history would spend now). Filled bets carry
+  `closeSrc` 'live' | 'hist' (title on the Close box); a typed close deletes it. `applyClose()` is shared with ⚡ Closing
+  prices (`pullCloses`, still there for a close taken by hand). apiGet awaits opened() and the timers skip
+  document.prerendering, so a page built in the background spends nothing.
+- Two devices open at once can each pull the same close (`nhlp_closed` is per browser; sync merges `closeOdds`) — 1 credit.
+- TESTED 2026-10-20 with a mocked fetch only (no real credits): a throwaway copy of the built page with fetch mocked (fake
+  ESPN scoreboard + Odds API events / odds / history, x-requests-remaining) and fresh localStorage on its own port. Start
+  in 10 min → filled live (exact −115; a 3.5 bet vs the book's 2.5 → ≈ translated), 1 credit; started game untouched until
+  history was ticked → filled from start−5 min (11 credits); start in 20 min → nothing; re-checks spend nothing; credits
+  below the reserve → paused with a note; document.prerendering → nothing until activation. The real historical endpoint
+  was NOT called — it is the NFL app's (tested there on IND@WAS 2026-10-04).
+
 ## One site, one pot (2026-10-16, user: "combine all into one sim … make them like the nfl sim … one pot")
 - The NFL, NBA and NHL apps are separate repos on ONE site (popcawn.github.io), so they share one browser storage. Each
   page has a sport switcher (🏈 · 🏀 · 🏒, relative links ../<repo>/) and a 💰 pot chip.

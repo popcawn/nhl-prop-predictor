@@ -276,8 +276,11 @@
             <div>Your state <select id="oddsState" class="ss"><option value="">— pick —</option></select> <span class="muted">— BetMGM and Caesars put it in their bet-slip links</span></div>
             <div><b>What a pull fetches</b> <span class="muted">— 1 credit each, per game:</span> <b id="oddsCost"></b><br>
               <label><input type="checkbox" class="mkchk" value="player_shots_on_goal"> Shots on goal</label> <label><input type="checkbox" class="mkchk" value="player_goal_scorer_anytime"> Anytime goal</label> <label><input type="checkbox" class="mkchk" value="player_points"> Points</label> <label><input type="checkbox" class="mkchk" value="player_goals"> Goals over/under <span class="muted">(fewer books; sharpens the goal price)</span></label></div>
+            <div><b>Closing prices</b> <span class="muted">— Close fills itself, so the bet log's CLV works</span><br>
+              <label title="while the app is open in the 15 minutes before puck drop, Close is filled from your book's live price — 1 credit per bet type per game"><input type="checkbox" id="autoCloseChk"> ⚡ closing lines before puck drop <span class="muted">(1 credit per bet type, app open)</span></label><br>
+              <label title="for games you didn't have the app open for: after puck drop, Close comes from The Odds API's price history (your book 5 min before the start) — 10 credits per bet type per game"><input type="checkbox" id="autoHistChk"> + after puck drop from history <span class="muted">(10 credits per bet type per game)</span></label> <span id="histCost" class="muted"></span></div>
             <div>Never pull below <input id="oddsReserve" type="number" min="0" step="10" style="width:70px;font-size:12px"> credits <span class="muted">(kept for your other apps on this key)</span></div>
-            <div class="muted">A pull returns every US book for the same credits. Games are nightly — 8 games × 3 markets is 24 credits a pull — so nothing is pulled automatically: use ⚡ on one game, or Pull tonight.</div>
+            <div class="muted">A pull returns every US book for the same credits. Games are nightly — 8 games × 3 markets is 24 credits a pull — so prices are only pulled when you ask: use ⚡ on one game, or Pull tonight. The one automatic pull is the closing price above, only for games you have a bet on.</div>
           </div>
         </details>
       </div>
@@ -323,14 +326,14 @@
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
           <span id="autoMsg" class="muted" style="font-size:12px"></span>
           <span id="syncNote" class="muted" style="font-size:12px"></span>
-          <span style="margin-left:auto;display:flex;gap:6px"><button class="ss" id="closeNow" title="fill Close on every open bet whose game hasn't started, from your books' current price (1 credit per market per game)">⚡ Closing prices</button><button class="ss" id="settleNow">🤖 Settle now</button></span>
+          <span style="margin-left:auto;display:flex;gap:6px"><button class="ss" id="closeNow" title="Close fills itself in the 15 minutes before puck drop while the app is open (odds settings). This fills it NOW on every open bet whose game hasn't started, from your books' current price (1 credit per market per game)">⚡ Closing prices</button><button class="ss" id="settleNow">🤖 Settle now</button></span>
         </div>
         <div id="betBody"></div>
         <details style="margin-top:12px"><summary style="cursor:pointer;font-size:13px;font-weight:700">⚙ More <span class="muted" style="font-weight:400">— how it was tested · backup</span></summary>
           <div class="sub" style="font-size:13px"><b>🏆 By sportsbook</b> <span class="muted">— every sport's settled bets, most profitable first</span><div id="bookStats"></div></div>
           <div class="sub" id="testNote" style="font-size:13px;line-height:1.55"></div>
           <div class="sub"><b>Backup</b> <button class="ss" id="betExport">⬇ Export</button> <button class="ss" id="betImport">⬆ Import</button> <input type="file" id="betImportFile" accept=".json,application/json" style="display:none"> <button class="ss" id="betClear">Clear log</button></div>
-          <div class="sub muted" style="font-size:12px;line-height:1.55"><b>How to read it.</b> <b>CLV</b> = how much better your price was than the closing price at the same book; beat the close over many bets and profit follows. A grey <b>≈</b> CLV is a live read from your last pull. <b>▼ / ▲</b> = the book moved the line since you bet. <b>🤖</b> = settled from ESPN's box score (a scratched player is a void). <b>✋</b> = settle that one yourself.</div>
+          <div class="sub muted" style="font-size:12px;line-height:1.55"><b>How to read it.</b> <b>CLV</b> = how much better your price was than the closing price at the same book; beat the close over many bets and profit follows. <b>Close</b> fills itself: your book's price in the 15 minutes before puck drop while the app is open, or — if you tick it under odds settings — its price 5 minutes before the start from price history. A grey <b>≈</b> CLV is a live read from your last pull. <b>▼ / ▲</b> = the book moved the line since you bet. <b>🤖</b> = settled from ESPN's box score (a scratched player is a void). <b>✋</b> = settle that one yourself.</div>
         </details>
       </div>
     </div>
@@ -774,7 +777,7 @@ function renderBets(){
         const sideOf=String(b.market).split('|')[2], against=moved&&((sideOf==='U'&&b.cur.l>mine)||(sideOf==='O'&&b.cur.l<mine)), arrowH=moved?`<span class="${against?'clv-bad':'ev-pos'}" title="${against?'the line moved against your bet':'the line moved your way'}">${arrow.trim()}</span> `:'';
         const clvTxt=clv!=null?` <b class="${cg(clv)}">${pc(clv)}</b>${b.closeEst?'<span class="muted" title="the line moved — this is the equivalent price at your line"> ≈</span>':''}`:b.result!=='pending'||!b.cur?'':live!=null?` <span class="${cg(live)}" style="font-size:12px" title="${esc((moved?`the line moved to ${b.cur.l} (${b.cur.o}) — about ${b.cur.q} at your line. `:`now ${b.cur.q}. `)+'A live read, not final until the close.')}">${arrowH}<span class="muted">≈ ${esc(b.cur.q)} ${moved?'at your '+mine:'now'} ·</span> ${pc(live)}</span>`:moved?` <span style="font-size:12px">${arrowH}</span>`:'';
         return `<tr><td class="l"><b title="chance when logged: ${b.modelProb!=null?pct(b.modelProb):'—'}">${esc(b.player)}</b> <span class="muted">${mktLabel(b.market)} · ${esc(fmtGame(b.game))}</span>${b.offBoard&&b.result==='pending'?' <span style="color:var(--warn);font-size:12px" title="your book no longer offers this prop">⚠ off the board</span>':''}</td>`+
-          `<td class="odds">${esc(b.odds)}${bkBadge(b.book)}</td><td><input class="betclose" data-id="${b.id}" value="${esc(b.closeOdds||'')}" placeholder="close" style="width:62px;font-family:var(--mono);font-size:13px;text-align:right">${clvTxt}</td>`+
+          `<td class="odds">${esc(b.odds)}${bkBadge(b.book)}</td><td><input class="betclose" data-id="${b.id}" value="${esc(b.closeOdds||'')}" placeholder="close"${b.closeSrc?` title="${b.closeSrc==='hist'?'your book 5 min before the start (price history)':'your book in the last 15 min before the start'}"`:''} style="width:62px;font-family:var(--mono);font-size:13px;text-align:right">${clvTxt}</td>`+
           `<td title="${b.stake}u">${betStakeTxt(b)}</td><td><select class="betres ss" data-id="${b.id}">${['pending','win','loss','push'].map(x=>`<option${x===b.result?' selected':''}>${x}</option>`).join('')}</select>${b.auto&&b.result!=='pending'?` <span title="${esc('settled from ESPN: '+b.auto)}">🤖</span>`:''}${b.result==='pending'&&b.autoNote?` <span title="${esc(b.autoNote)}" style="cursor:help">✋</span>`:''}</td>`+
           `<td class="${pl!=null?g(pl):''}">${pl==null?'—':mny(pl)}</td><td><button class="ss betdel" data-id="${b.id}" style="color:var(--warn)">✕</button></td></tr>`; }).join('')+`</tbody></table></div>`;
   [...weeks.keys()].sort((a,b)=>b-a).forEach((ws,wi)=>{ const R=weeks.get(ws), a=agg(R), wOpen=LOGOPEN.has('W'+ws)?LOGOPEN.get('W'+ws):(wi===0||a.open>0);
@@ -790,7 +793,7 @@ function renderTest(){ const bt=M.backtest||{}; $('testNote').innerHTML=`<b>How 
   `<div class="scroll"><table style="margin-top:6px;max-width:620px"><thead><tr><th class="l">Bet</th><th>Player-games</th><th>Simulator</th><th>Season average</th></tr></thead><tbody>`+
   STATS.map(s=>{ const x=bt[s]; return x?`<tr><td class="l">${SHORT[s]}</td><td>${x.n.toLocaleString()}</td><td><b>${x.brier[0].toFixed(4)} / ${x.brier[1].toFixed(4)}</b></td><td class="muted">${x.naive[0].toFixed(4)} / ${x.naive[1].toFixed(4)}</td></tr>`:''; }).join('')+
   `</tbody></table></div><div class="muted" style="font-size:12px;margin-top:4px">Lower is better. <b>Against real prices</b> (299 games of 2025-26, every US book ~20 minutes before puck drop): the other books' price beat the simulator on shots and points in both halves; on anytime goal they were exactly as good as each other. Betting every over lost about 4%, every under about 8%, every anytime goal 8% (2.6% inside +100 to +400); the anytime prices that looked best lost 38%. So the app goes by the other books' price, gives the simulator no say, and never recommends an anytime-goal bet.</div>`; }
-function renderAll(){ buildCands(); buildCard(); renderSlate(); renderGame(); renderBoard(); renderCard(); renderBets(); oddsStatus(); }
+function renderAll(){ buildCands(); buildCard(); renderSlate(); renderGame(); renderBoard(); renderCard(); renderBets(); oddsStatus(); showHistCost(); }
 
 // ---------------------------------------------------------------- auto-settle (ESPN box scores) and closing prices
 let AUTO_NOTE='', autoBusy=false;
@@ -810,13 +813,77 @@ async function autoSettle(manual){
     $('autoMsg').innerHTML=AUTO_NOTE;
   }finally{ autoBusy=false; }
 }
-// Close = your book's price right before puck drop. This button takes it now for every open bet whose game hasn't started.
+// Close = your book's price right before puck drop, at the bet's own line (closeView translates a moved line)
+function applyClose(b, board){ const v=closeView(b, board); if(!v||!v.odds) return false; b.closeOdds=v.odds; if(v.est) b.closeEst=`${v.line} ${v.raw}`; else delete b.closeEst; return true; }
+// This button takes it now for every open bet whose game hasn't started.
 async function pullCloses(){
   const msg=$('autoMsg'), open=bets.filter(b=>b.result==='pending'&&!b.closeOdds&&Date.parse(b.ko||0)>Date.now()), games=[...new Set(open.map(b=>b.game))].map(gameOf).filter(Boolean);
   if(!oddsKey()){ msg.innerHTML=oddsWhy({status:'nokey'}); return; } if(!games.length){ msg.textContent='no open bets on games that haven\'t started'; return; }
   let filled=0; for(const g of games){ const L=open.filter(b=>b.game===g.game), mk=[...new Set(L.map(b=>oaOf(b.market.split('|')[1])))].filter(Boolean);
-    try{ const board=await pullGame(g, mk); applyBoard(g, board, true); for(const b of L){ const v=closeView(b, board); if(v&&v.odds){ b.closeOdds=v.odds; if(v.est) b.closeEst=`${v.line} ${v.raw}`; else delete b.closeEst; filled++; } } }catch(e){ msg.innerHTML=`${fmtGame(g.game)}: ${oddsWhy(e)}`; } }
+    try{ const board=await pullGame(g, mk); applyBoard(g, board, true); for(const b of L) if(applyClose(b, board)){ delete b.closeSrc; filled++; } }catch(e){ msg.innerHTML=`${fmtGame(g.game)}: ${oddsWhy(e)}`; } }
   saveBets(); oddsStatus(); msg.innerHTML=`⚡ closing price filled for <b>${filled}</b> bet${filled===1?'':'s'}`;
+}
+// ⚡ AUTOMATIC CLOSES (the NFL app's rule). While the app is open in the 15 minutes before puck drop: one live pull per game
+// and market (1 credit each). Opt-in, for games the app wasn't open for: after puck drop from The Odds API's price history
+// — your book 5 min before the start, 10 credits per market per game + 1 to find the event. Each game + market is tried
+// once (nhlp_closed); both stop at CFG.reserve; a page built in the background spends nothing (apiGet awaits opened()).
+const HIST_API='https://api.the-odds-api.com/v4/historical/sports/icehockey_nhl', CLOSE_WIN=15*60e3, HIST_DAYS=14;
+let AUTO=Object.assign({close:true, hist:false}, lsJ('nhlp_auto', {}));   // hist costs 10 credits per bet type per game — off until you tick it
+let CLOSED=(c=>{ const old=Date.now()-21*864e5; for(const k of Object.keys(c)) if(!(c[k].t>old)) delete c[k]; return c; })(lsJ('nhlp_closed', {}));
+let closeBusy=false, histPause=0;
+const startOf=b=>{ const g=gameOf(b.game); return Date.parse((g&&g.tip)||b.ko||'')||0; };
+const gameFor=b=>{ const g=gameOf(b.game); if(g) return g; const [away,home]=String(b.game).split('@'); return {game:b.game, away, home, tip:b.ko}; };
+// bets with no Close yet whose game passes when(bet, start), by game: [{g, k0, L: bets, mk: Set of Odds API markets}]
+function closeGroups(when){ const by=new Map();
+  for(const b of bets){ if(b.closeOdds||!b.key||!b.game||!String(b.market).startsWith('P|')) continue; const k0=startOf(b), m=oaOf(b.market.split('|')[1]);
+    if(!k0||!m||CLOSED[b.game+'|'+k0+'|'+m]||!when(b,k0)) continue;
+    const ck=b.game+'|'+k0, x=by.get(ck)||by.set(ck,{g:gameFor(b), k0, L:[], mk:new Set()}).get(ck); x.L.push(b); x.mk.add(m); }
+  return [...by.values()]; }
+const liveDue=(b,k0)=>b.result==='pending'&&k0>Date.now()&&k0-Date.now()<=CLOSE_WIN;
+const histDue=(b,k0)=>b.result!=='push'&&k0<Date.now()&&Date.now()-k0<HIST_DAYS*864e5;   // a void needs no close
+const markClosed=(g,k0,mk,how)=>{ for(const m of mk) CLOSED[g.game+'|'+k0+'|'+m]={t:Date.now(), how}; lsW('nhlp_closed', CLOSED); };
+// fill Close on the group's bets from a board — by id, in case a sync swapped the bet list during the pull
+const fillFrom=(L, board, src)=>{ let n=0; for(const id of L.map(b=>b.id)){ const b=bets.find(x=>x.id===id); if(b&&!b.closeOdds&&applyClose(b, board)){ b.closeSrc=src; n++; } } return n; };
+async function autoLiveCloses(){
+  if(!AUTO.close||!oddsKey()) return '';
+  let filled=0, spent=0; const notes=[];
+  for(const {g,k0,L,mk} of closeGroups(liveDue)){ const M=[...mk];
+    if(oddsLeft!=null&&oddsLeft-M.length<CFG.reserve){ notes.push('closes paused — credits at your reserve'); break; }
+    try{ const board=await pullGame(g, M); spent+=M.length; applyBoard(g, board, true); filled+=fillFrom(L, board, 'live'); markClosed(g, k0, M, 'live'); }
+    catch(e){ if(e.status===401||e.status===429||e.status==='nokey'){ notes.push(oddsWhy(e)); break; } }   // else tried again on the next check, until puck drop
+  }
+  if(filled) saveBets(); oddsStatus();
+  return [filled?`⚡ closing prices filled for <b>${filled}</b> bet${filled>1?'s':''} (${spent} credit${spent>1?'s':''})`:'', ...notes].filter(Boolean).join(' · ');
+}
+// your books' prices for one game 5 min before its start, from The Odds API's history (paid plans)
+async function histBoard(g, k0, markets){
+  const key=oddsKey(); if(!key) throw oddsFail('nokey'); const at=new Date(k0-5*60e3).toISOString().replace(/\.\d{3}Z$/,'Z');
+  const evl=await apiGet(`${HIST_API}/events?apiKey=${encodeURIComponent(key)}&date=${at}`);   // 1 credit: finds the event id
+  const e=(evl.data||[]).find(x=>abbrByName(x.away_team)===g.away&&abbrByName(x.home_team)===g.home); if(!e) throw oddsFail('noevent');
+  const j=await apiGet(`${HIST_API}/events/${e.id}/odds?apiKey=${encodeURIComponent(key)}&date=${at}&bookmakers=${myBooks().join(',')}&markets=${markets.join(',')}&oddsFormat=american`);
+  return parseBoard(j.data||{}, g); }
+const histCostOf=G=>G.reduce((a,x)=>a+1+10*x.mk.size, 0);
+async function autoHistCloses(){
+  if(!AUTO.hist||!oddsKey()||Date.now()<histPause) return '';
+  const off=lsJ('nhlp_histoff',0); if(off&&Date.now()-off<3*864e5) return '';   // free plan: try again in a few days
+  let filled=0, spent=0; const notes=[];
+  for(const x of closeGroups(histDue)){ const {g,k0,L}=x, M=[...x.mk], cost=histCostOf([x]);
+    if(oddsLeft!=null&&oddsLeft-cost<CFG.reserve){ notes.push('closes paused — credits at your reserve'); break; }
+    try{ const board=await histBoard(g, k0, M); spent+=cost; filled+=fillFrom(L, board, 'hist'); markClosed(g, k0, M, 'hist'); }
+    catch(e){ if(e.code==='HISTORICAL_UNAVAILABLE_ON_FREE_USAGE_PLAN'){ lsW('nhlp_histoff', Date.now()); notes.push('closes after puck drop need a paid Odds API plan'); break; }
+      if(e.status==null||e.status===401||e.status===429||e.status==='nokey'){ histPause=Date.now()+30*60e3; notes.push(oddsWhy(e)); break; }   // offline, key or credits: try again later
+      markClosed(g, k0, M, 'fail'); notes.push(`${fmtGame(g.game)}: ${oddsWhy(e)}`); }
+  }
+  if(filled) saveBets(); oddsStatus();
+  return [filled?`closes filled for <b>${filled}</b> bet${filled>1?'s':''} from price history (~${spent} credits)`:'', ...notes].filter(Boolean).join(' · ');
+}
+// next to the history checkbox: what ticking it would fill and cost right now
+function showHistCost(){ const el=$('histCost'); if(!el) return; const G=closeGroups(histDue), n=G.reduce((a,x)=>a+x.L.length, 0);
+  el.textContent=n?`— ${n} bet${n>1?'s':''} waiting · about ${histCostOf(G)} credits`:''; }
+async function autoCloses(){
+  if(closeBusy||document.prerendering) return; closeBusy=true;
+  try{ const t=[await autoLiveCloses(), await autoHistCloses()].filter(Boolean).join(' · '); if(t){ AUTO_NOTE=t; $('autoMsg').innerHTML=t; } }
+  catch(e){} finally{ closeBusy=false; showHistCost(); }
 }
 
 // ---------------------------------------------------------------- wiring
@@ -828,8 +895,11 @@ $('gameBody').addEventListener('change', e=>{ const day=(STATUS[SLATE_DAY]=STATU
 $('boardBody').addEventListener('click', e=>{ const b=e.target.closest('.logrow'); if(!b) return; const c=BOARDROWS[+b.dataset.i]; if(!c) return; const pick=CARD.find(p=>p.game===c.game&&p.key===c.key&&p.market===c.market);
   if(logBet(c, pick?pick.stake:Math.max(0.1, Math.min(BET_CAP, Math.round(0.25*c.kelly*UNITS*10)/10)))) saveBets(); });
 $('boardAll').onchange=renderBoard; $('cardN').onchange=renderAll; $('pullAll').onclick=()=>pullAll(); $('settleNow').onclick=()=>autoSettle(true); $('closeNow').onclick=pullCloses;
+$('autoCloseChk').checked=AUTO.close; $('autoHistChk').checked=AUTO.hist;
+$('autoCloseChk').onchange=e=>{ AUTO.close=e.target.checked; lsW('nhlp_auto', AUTO); if(AUTO.close) autoCloses(); };
+$('autoHistChk').onchange=e=>{ AUTO.hist=e.target.checked; lsW('nhlp_auto', AUTO); if(AUTO.hist) autoCloses(); };
 $('betBody').addEventListener('change', e=>{ const b=bets.find(x=>x.id===e.target.dataset.id); if(!b) return;
-  if(e.target.classList.contains('betclose')){ b.closeOdds=e.target.value.trim(); delete b.closeEst; } else if(e.target.classList.contains('betres')){ b.result=e.target.value; delete b.auto; if(b.result==='pending') delete b.st; else b.st=Date.now(); } saveBets(); });
+  if(e.target.classList.contains('betclose')){ b.closeOdds=e.target.value.trim(); delete b.closeEst; delete b.closeSrc; } else if(e.target.classList.contains('betres')){ b.result=e.target.value; delete b.auto; if(b.result==='pending') delete b.st; else b.st=Date.now(); } saveBets(); });
 $('betBody').addEventListener('click', e=>{ const d=e.target.closest('.betdel'); if(d){ bets=bets.filter(x=>x.id!==d.dataset.id); saveBets(); } });
 $('betBody').addEventListener('toggle', e=>{ const d=e.target; if(!d.classList) return; if(d.classList.contains('daygrp')) LOGOPEN.set(+d.dataset.d, d.open); else if(d.classList.contains('weekgrp')) LOGOPEN.set('W'+d.dataset.w, d.open); }, true);
 $('bankUsd').addEventListener('change', e=>{ const v=+e.target.value||0; BANK=v>0?{amt:+v.toFixed(2), at:Date.now()}:{amt:null, at:0}; saveBank(); renderAll(); });
@@ -869,6 +939,9 @@ showTab(lsJ('nhlp_mtab','card'));
 renderTest(); renderAll(); loadSlate(); loadInjuries(); syncNote();
 opened().then(()=>setTimeout(()=>syncNow(), 2000)); setInterval(()=>{ if(!document.prerendering) syncNow(); }, 5*60e3); window.addEventListener('focus', ()=>syncSoon(500));
 opened().then(()=>setTimeout(()=>autoSettle(false), 4000)); setInterval(()=>{ if(!document.prerendering) autoSettle(false); }, 10*60e3);
+// closing prices: checked every 2 min and when the tab comes back (phones pause timers); the first check waits for the sync
+opened().then(()=>setTimeout(autoCloses, 8000)); setInterval(()=>{ if(!document.prerendering) autoCloses(); }, 2*60e3);
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') autoCloses(); });
 // opened after being built in the background: catch up on the pot
 document.addEventListener('prerenderingchange', ()=>{ BANK=Object.assign({amt:null, at:0, mt:0}, lsJ('nfltd_bank', {})); renderAll(); });
 })();
