@@ -682,7 +682,8 @@ function buildCard(){
   const tot=picks.reduce((a,c)=>a+c.stake,0); if(tot>NIGHT_CAP) picks.forEach(c=>{ c.stake=Math.max(0.1, Math.floor(c.stake*NIGHT_CAP/tot*10)/10); });
   CARD=picks;
 }
-function logBet(c, stake){ if(bets.some(b=>b.result==='pending'&&b.game===c.game&&b.key===c.key&&statOf(b.market)===statOf(c.market))) return false;   // one bet per player per stat const k=unitUsd();
+// one bet per player per stat: a second bet on the same player's stat (any line, either side) is refused
+function logBet(c, stake){ if(bets.some(b=>b.result==='pending'&&b.game===c.game&&b.key===c.key&&statOf(b.market)===statOf(c.market))) return false; const k=unitUsd();
   bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*1e6), ts:new Date().toISOString(), ko:c.tip, ev:c.evId, game:c.game, key:c.key, player:c.name, market:c.market, odds:c.odds, book:c.book,
     modelProb:+c.mp.toFixed(4), rawP:+c.model.toFixed(4), ...(c.mkt!=null?{mktP:+c.mkt.toFixed(4)}:{}), pmu:+c.mu.toFixed(3), stake:+(+stake).toFixed(1), ...(k!=null?{usd:+(stake*k).toFixed(2)}:{}), closeOdds:'', result:'pending'});
   return true; }
