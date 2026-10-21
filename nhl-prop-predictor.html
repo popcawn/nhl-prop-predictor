@@ -663,11 +663,10 @@ function buildCands(){
 }
 // tonight's card: best bets across every pulled game — ¼ Kelly on the confidence-adjusted edge, one per player,
 // at most 2 per team and 3 per game, a night capped at 12% of bankroll
-const NIGHT_CAP=12, BET_CAP=3;
+const BET_CAP=3;   // one bet is at most 3u (3% of bankroll); no nightly cap (user, 2026-10-21: "no cap on nhl or nba either")
 const statOf=m=>String(m||'').split('|')[1];   // 'P|sog|O|2.5' -> 'sog'
 // every take (user, 2026-10-21: "remove show up to, show all take bets"): no count, team or game limit — one bet per
-// player per stat (a stat already in your log holds it, whatever the line); the night cap still scales the stakes
-// down when there are many, so the night's total risk doesn't grow
+// player per stat (a stat already in your log holds it, whatever the line); each bet is sized on its own (¼ Kelly, ≤ BET_CAP)
 // ✕ Skip (user, 2026-10-21: "should it be a removed button … when i recheck for bets it doesnt pop up again"): a bet you pass
 // on stays off the card for that game — through re-pulls — keyed game + player + stat; "↩ Bring back" undoes it. Kept 4 days.
 let SKIP=(o=>{ const old=Date.now()-4*864e5; for(const k of Object.keys(o)) if(!(o[k]>old)) delete o[k]; return o; })(lsJ('nhlp_skip', {})||{});
@@ -680,7 +679,6 @@ function buildCard(){
   for(const c of CANDS.filter(c=>c.tier==='take'&&!c.dup).sort((a,b)=>b.kelly-a.kelly)){ const pk=c.game+'|'+c.key+'|'+statOf(c.market);
     if(seen.has(pk)||SKIP[pk]) continue; seen.add(pk);
     picks.push(Object.assign({}, c, {stake:Math.max(0.1, Math.min(BET_CAP, Math.round(0.25*c.kelly*UNITS*10)/10)), held:held.has(pk)})); }
-  const tot=picks.reduce((a,c)=>a+c.stake,0); if(tot>NIGHT_CAP) picks.forEach(c=>{ c.stake=Math.max(0.1, Math.floor(c.stake*NIGHT_CAP/tot*10)/10); });
   CARD=picks;
 }
 // one bet per player per stat: a second bet on the same player's stat (any line, either side) is refused
@@ -768,7 +766,7 @@ function renderCard(){
   const tot=CARD.reduce((a,c)=>a+c.stake,0), un=CARD.filter(c=>!c.held), nIn=CARD.length-un.length;
   body.innerHTML=(un.length?cardStat('new',`🆕 ${un.length} NEW BET${un.length>1?'S':''}`, `${stakeTxt(un.reduce((a,c)=>a+c.stake,0))} to bet${nIn?` · ${nIn} already logged`:''}`):cardStat('done','✅ NO NEW BETS',`${CARD.length>1?'all '+CARD.length+' bets on the card are':'the bet on the card is'} already in your log`))+
     // only new bets are drawn (user, 2026-10-21: "logged bets shouldnt be shown. Only new bets") — the log has the rest
-    (un.length?`<div class="muted" style="font-size:13px;margin:-2px 0 8px">${nIn?`Tonight ${stakeTxt(tot)} in all · `:''}${tot.toFixed(1)}% of bankroll (the cap is ${NIGHT_CAP}%) · best bet first</div>`+
+    (un.length?`<div class="muted" style="font-size:13px;margin:-2px 0 8px">${nIn?`Tonight ${stakeTxt(tot)} in all · `:''}${tot.toFixed(1)}% of bankroll · best bet first</div>`+
     `<div class="bacts"><button class="ss" id="cardLog">📓 Log ${un.length===CARD.length?'these '+un.length:'the '+un.length+' new'}</button></div>`:'')+
     byBook(un).map(([b,L])=>`<div class="bgame">${esc(bookName(b))} · ${L.length} bet${L.length>1?'s':''} · ${stakeTxt(L.reduce((a,c)=>a+c.stake,0))}${L.length>1?`<span class="bgo">${linkButtons(L, `Open all ${L.length} on`)}</span>`:''}</div>`+
     `<div class="bcards">`+L.map(c=>betCard({nw:true, tc:teamColor(c.abbr), name:(CARD.indexOf(c)?'':'★ ')+c.name, mkt:mktLabel(c.market), sub:`${esc(fmtGame(c.game))}${tipTime(c.game)?' · '+tipTime(c.game):''}`, odds:c.odds, book:c.book, stake:c.stake,
