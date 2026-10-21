@@ -218,6 +218,9 @@
   .bcwhy b{font-family:var(--mono);font-weight:600;color:var(--ink2)}
   .bcwhy b.ev-pos{color:var(--good)}
   .bclink{margin-top:9px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  /* the bet log fits its column — no sideways scroll bar (user, 2026-10-21): the bet and the close / CLV text wrap */
+  table.logtbl td{white-space:normal} table.logtbl td.l{min-width:170px}
+  table.logtbl td.odds,table.logtbl td:nth-last-child(-n+4){white-space:nowrap}
   .bclink .statussel,.bclink .ss{font-size:13px;padding:5px 11px!important}
   .unlog:hover{color:var(--bad)!important;border-color:var(--bad)!important;font-size:0!important} .unlog:hover::after{content:"✕ remove";font-size:12px}
   .bclink .bskip{color:var(--ink3)} .bclink .bskip:hover{color:var(--bad);border-color:var(--bad)}
@@ -799,7 +802,7 @@ function renderBets(){
   const tonight=SLATE_DAY?new Date(+SLATE_DAY.slice(0,4), +SLATE_DAY.slice(4,6)-1, +SLATE_DAY.slice(6,8)).getTime():null;
   const weeks=new Map(); for(const r of rows){ const w=weekOf(dayOf(r.b)); (weeks.get(w)||weeks.set(w,[]).get(w)).push(r); }
   const upTo=new Map(); { let sp=0, nt=0; for(const w of [...weeks.keys()].sort((a,b)=>a-b)){ const a=agg(weeks.get(w)); sp+=a.spent; nt+=a.net; upTo.set(w,{spent:sp, net:nt}); } }
-  const table=R=>`<div class="scroll"><table><thead><tr><th class="l">Bet</th><th>Odds</th><th>Close · CLV</th><th>Stake</th><th>Result</th><th>P/L</th><th></th></tr></thead><tbody>`+
+  const table=R=>`<div class="scroll"><table class="logtbl"><thead><tr><th class="l">Bet</th><th>Odds</th><th>Close · CLV</th><th>Stake</th><th>Result</th><th>P/L</th><th></th></tr></thead><tbody>`+
       R.map(({b,clv,live,pl})=>{ const mine=+String(b.market).split('|')[3], moved=b.cur&&b.cur.l!=null&&b.cur.l!==mine, arrow=moved?(b.cur.l<mine?'▼':'▲')+b.cur.l+' ':'';
         const sideOf=String(b.market).split('|')[2], against=moved&&((sideOf==='U'&&b.cur.l>mine)||(sideOf==='O'&&b.cur.l<mine)), arrowH=moved?`<span class="${against?'clv-bad':'ev-pos'}" title="${against?'the line moved against your bet':'the line moved your way'}">${arrow.trim()}</span> `:'';
         const clvTxt=clv!=null?` <b class="${cg(clv)}">${pc(clv)}</b>${b.closeEst?'<span class="muted" title="the line moved — this is the equivalent price at your line"> ≈</span>':''}`:b.result!=='pending'||!b.cur?'':live!=null?` <span class="${cg(live)}" style="font-size:12px" title="${esc((moved?`the line moved to ${b.cur.l} (${b.cur.o}) — about ${b.cur.q} at your line. `:`now ${b.cur.q}. `)+'A live read, not final until the close.')}">${arrowH}<span class="muted">≈ ${esc(b.cur.q)} ${moved?'at your '+mine:'now'} ·</span> ${pc(live)}</span>`:moved?` <span style="font-size:12px">${arrowH}</span>`:'';
