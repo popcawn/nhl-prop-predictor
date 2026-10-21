@@ -219,6 +219,7 @@
   .bcwhy b.ev-pos{color:var(--good)}
   .bclink{margin-top:9px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
   .bclink .statussel,.bclink .ss{font-size:13px;padding:5px 11px!important}
+  .unlog:hover{color:var(--bad)!important;border-color:var(--bad)!important;font-size:0!important} .unlog:hover::after{content:"✕ remove";font-size:12px}
   .bclink .bskip{color:var(--ink3)} .bclink .bskip:hover{color:var(--bad);border-color:var(--bad)}
   .bcfloor{margin-left:auto;font-size:12.5px;color:var(--ink3);white-space:nowrap} .bcfloor b{font-family:var(--mono);color:var(--ink2)}
   .skipnote{margin-top:14px;font-size:13px;color:var(--ink3);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -733,7 +734,7 @@ function renderBoard(){
       `<td class="odds">${esc(c.odds)}${bkBadge(c.book)}</td><td class="hide640">${c.stat==='goal'?pct(1-Math.exp(-c.mu)):c.mu.toFixed(2)}</td>`+
       `<td title="${esc(c.mkt!=null?`${c.src==='own'?'the book\'s own price':'other books'} ${pct(c.mkt)} (cut removed) · model ${pct(c.model)} · fair ${probToAmerican(c.mp)}`:'model only')}">${pct(c.mp)}</td>`+
       `<td class="${c.ev>0&&c.tier==='take'?'ev-pos':'ev-neg'}">${c.ev>=0?'+':''}${(c.ev*100).toFixed(1)}%</td><td class="hide900">${confBadge(c.conf)}</td><td>${verdictOf(c)}</td>`+
-      `<td><button class="ss logrow" data-i="${i}" ${isL?'disabled':''} title="${isL?'already in your bet log':'log this bet'}" style="${isL?'color:var(--good)':''}">${isL?'✓':'📓'}</button></td></tr>`; }).join('')
+      `<td><button class="ss logrow${isL?' unlog':''}" data-i="${i}" title="${isL?'in your bet log — click to take it out':'log this bet'}" style="${isL?'color:var(--good)':''}">${isL?'✓':'📓'}</button></td></tr>`; }).join('')
     : `<tr><td class="l muted" colspan="9">${all.length?'No price with an edge right now — tick the box to see them all.':'Nothing pulled yet. ⚡ Pull tonight (or one game) to fill this.'}</td></tr>`;
 }
 const cardStat=(cls,big,small)=>`<div class="cardstat ${cls}">${big}${small?` <span>${small}</span>`:''}</div>`;
@@ -920,7 +921,10 @@ $('statTabs').addEventListener('click', e=>{ const t=e.target.closest('.tab'); i
 $('gameBody').addEventListener('change', e=>{ const day=(STATUS[SLATE_DAY]=STATUS[SLATE_DAY]||{});
   const s=e.target.closest('.stsel'); if(s){ day[s.dataset.key]=s.value; lsW('nhlp_status', STATUS); renderAll(); return; }
   const gs=e.target.closest('.gsel'); if(gs){ day['G|'+gs.dataset.g+'|'+gs.dataset.t]=gs.value; lsW('nhlp_status', STATUS); renderAll(); } });
-$('boardBody').addEventListener('click', e=>{ const b=e.target.closest('.logrow'); if(!b) return; const c=BOARDROWS[+b.dataset.i]; if(!c) return; const pick=CARD.find(p=>p.game===c.game&&p.key===c.key&&p.market===c.market);
+$('boardBody').addEventListener('click', e=>{ const b=e.target.closest('.logrow'); if(!b) return; const c=BOARDROWS[+b.dataset.i]; if(!c) return;
+  if(b.classList.contains('unlog')){ const x=bets.find(y=>y.result==='pending'&&y.game===c.game&&y.key===c.key&&y.market===c.market);
+    if(x && confirm(`Take ${x.player} ${mktLabel(x.market)} ${x.odds} out of your bet log?`)){ bets=bets.filter(y=>y!==x); saveBets(); } return; }
+  const pick=CARD.find(p=>p.game===c.game&&p.key===c.key&&p.market===c.market);
   if(logBet(c, pick?pick.stake:Math.max(0.1, Math.min(BET_CAP, Math.round(0.25*c.kelly*UNITS*10)/10)))) saveBets(); });
 $('cardBody').addEventListener('click', e=>{ const b=e.target.closest('.bskip'); if(b){ SKIP[b.dataset.skip]=Date.now(); lsW('nhlp_skip', SKIP); renderAll(); return; }
   if(e.target.closest('#unskip')){ for(const k of nightSkips()) delete SKIP[k]; lsW('nhlp_skip', SKIP); renderAll(); } });
