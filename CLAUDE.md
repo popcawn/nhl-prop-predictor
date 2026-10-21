@@ -113,6 +113,8 @@ bet-log history). See README.md for the model and its backtest.
 - First paint waits for the app to draw itself: `<link rel="expect" href="#sims-ready" blocking="render">` in the head and
   `<i id="sims-ready" hidden>` right AFTER the main script (keep it last in body), so a sport switch fades from one finished
   page to the next instead of showing a half-drawn one.
+- The ⚡ Bets list draws ONLY new bets (user, 2026-10-21: "logged bets shouldnt be shown. Only new bets"); the status line
+  still counts the logged ones ("· 1 already in your log") and the log has them. Your card (NFL game tab) still shows both.
 
 ## The user
 - Bets FanDuel + DraftKings (+ BetMGM), wants "what do I bet and how much, in dollars", gets overwhelmed — keep the card
