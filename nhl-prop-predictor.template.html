@@ -463,7 +463,9 @@ const unitUsd=()=>{ const n=bankNow(); return n!=null?n/UNITS:null; };
 const roundUsd=x=>{ const a=Math.abs(x); return a>=20?Math.round(a):a>=1?Math.round(a*2)/2:Math.round(a*100)/100; };
 const fmtUsd=x=>{ const a=Math.abs(x); return (x<0?'−':'')+'$'+(a>=20?Math.round(a).toLocaleString():a>=1?(Math.round(a*2)/2).toFixed(Math.round(a*2)%2?2:0):a.toFixed(2)); };
 const stakeTxt=u=>{ const k=unitUsd(); return k!=null?fmtUsd(u*k):(Math.round(u*10)/10).toFixed(1)+'u'; };
-const betStakeTxt=b=>BANK.amt&&betUsd(b)!=null?fmtUsd(betUsd(b)):b.stake+'u';
+// a logged stake as it was bet: the usual $ format when it is a round amount, else to the cent (a hand-typed $2.37 stays $2.37)
+const exactUsd=x=>Math.abs(roundUsd(x)-x)<0.005 ? fmtUsd(x) : '$'+x.toFixed(2);
+const betStakeTxt=b=>BANK.amt&&betUsd(b)!=null?exactUsd(+betUsd(b)):b.stake+'u';
 function renderBank(){ const inp=$('bankUsd'), now=bankNow(); if(document.activeElement!==inp) inp.value=now!=null?Math.round(now*100)/100:'';
   if(now==null){ $('bankNow').textContent=''; renderPotChip(null,0); $('bankNote').textContent='Type what\'s in your betting account and every stake turns into dollars — one pot for NFL, NBA and NHL. It then grows or shrinks by itself as bets settle.'; return; }
   const AB=allBets(), done=AB.filter(b=>b.st>BANK.at&&betPl(b)!=null), d=now-BANK.amt, open=AB.filter(b=>b.result==='pending'), risk=open.reduce((a,b)=>a+(betUsd(b)||0),0);
@@ -975,6 +977,12 @@ showTab(lsJ('nhlp_mtab','card'));
 // open fully drawn: tonight's games + injuries as this browser last saw them; ESPN refreshes both a moment later
 { const c=lsJ('nhlp_slate', null); if(c&&c.day>=ymd(new Date())&&Array.isArray(c.games)&&c.games.length){ SLATE=c.games; SLATE_DAY=c.day; CUR=(SLATE.find(g=>g.state==='pre')||SLATE[0]||{}).game||null; }
   const ij=lsJ('nhlp_inj', null); if(ij&&Date.now()-ij.at<6*3600e3&&Array.isArray(ij.m)) INJ=new Map(ij.m); }
+// one-time (2026-10-21): bets logged before stakes were "logged as shown" kept the unrounded amount (the card said $2, the
+// log kept $1.97 — the user: "a 2 bet at +100 wins $2 not 1.97"). They bet what the card showed, so round those stakes to it;
+// P/L, To win and the pot then match the book. Each change is stamped so ☁ Sync carries it to the other devices.
+if(!lsJ('nhlp_usdround', false)){ const now=Date.now(); let n=0;
+  for(const b of bets) if(b.usd!=null && true){ const r=roundUsd(+b.usd); if(r!==+b.usd){ b.usd=r; b.mt=now; n++; } }
+  if(n) lsW('nhlp_bets', bets); lsW('nhlp_usdround', true); }
 renderTest(); renderAll(); loadSlate(); loadInjuries(); syncNote();
 opened().then(()=>setTimeout(()=>syncNow(), 2000)); setInterval(()=>{ if(!document.prerendering) syncNow(); }, 5*60e3); window.addEventListener('focus', ()=>syncSoon(500));
 opened().then(()=>setTimeout(()=>autoSettle(false), 4000)); setInterval(()=>{ if(!document.prerendering) autoSettle(false); }, 10*60e3);
