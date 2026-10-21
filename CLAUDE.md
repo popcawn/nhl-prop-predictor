@@ -118,6 +118,9 @@ bet-log history). See README.md for the model and its backtest.
 - The ⚡ Bets list is grouped BY SPORTSBOOK (user, 2026-10-21: "doesnt need to stacked. or even seperated by game … if
   anything seperate by book"): FanDuel, DraftKings, BetMGM, Caesars, Fanatics; each section is one grid of cards with an
   "Open all N on <book>" button, and each card names its game and start time. Fanatics (no slip link) opens its home page.
+- Tonight's card shows EVERY take (user, 2026-10-21: "remove show up to, show all take bets"): no bets-a-night select, no
+  team or game limit — one bet per player per STAT (statOf(); a stat in your log holds it at any line; logBet refuses a
+  second). NIGHT_CAP (12%) still scales the stakes down when there are many, so the night's total risk doesn't grow.
 
 ## The user
 - Bets FanDuel + DraftKings (+ BetMGM), wants "what do I bet and how much, in dollars", gets overwhelmed — keep the card

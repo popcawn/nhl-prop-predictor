@@ -290,7 +290,6 @@
       <h2 class="vh" data-m="card">Tonight's card</h2>
       <div id="cardPanel" data-m="card" style="margin-top:14px">
         <div id="cardBody"></div>
-        <div class="muted" style="font-size:13px;margin-top:14px"><label>Show up to <select id="cardN" class="ss"><option>3</option><option selected>5</option><option>8</option></select> bets a night</label></div>
       </div>
     </aside>
 
@@ -660,17 +659,20 @@ function buildCands(){
 }
 // tonight's card: best bets across every pulled game — ¼ Kelly on the confidence-adjusted edge, one per player,
 // at most 2 per team and 3 per game, a night capped at 12% of bankroll
-const MAX_TEAM=2, MAX_GAME=3, NIGHT_CAP=12, BET_CAP=3;
+const NIGHT_CAP=12, BET_CAP=3;
+const statOf=m=>String(m||'').split('|')[1];   // 'P|sog|O|2.5' -> 'sog'
+// every take (user, 2026-10-21: "remove show up to, show all take bets"): no count, team or game limit — one bet per
+// player per stat (a stat already in your log holds it, whatever the line); the night cap still scales the stakes
+// down when there are many, so the night's total risk doesn't grow
 function buildCard(){
-  const n=+$('cardN').value||5, held=new Set(bets.filter(b=>b.result==='pending').map(b=>b.game+'|'+b.key)), picks=[], perT={}, perG={}, seen=new Set();
-  for(const c of CANDS.filter(c=>c.tier==='take'&&!c.dup).sort((a,b)=>b.kelly-a.kelly)){ if(picks.length>=n) break; const pk=c.game+'|'+c.key;
-    if(seen.has(pk)||(perT[c.game+c.abbr]||0)>=MAX_TEAM||(perG[c.game]||0)>=MAX_GAME) continue;
-    seen.add(pk); perT[c.game+c.abbr]=(perT[c.game+c.abbr]||0)+1; perG[c.game]=(perG[c.game]||0)+1;
+  const held=new Set(bets.filter(b=>b.result==='pending').map(b=>b.game+'|'+b.key+'|'+statOf(b.market))), picks=[], seen=new Set();
+  for(const c of CANDS.filter(c=>c.tier==='take'&&!c.dup).sort((a,b)=>b.kelly-a.kelly)){ const pk=c.game+'|'+c.key+'|'+statOf(c.market);
+    if(seen.has(pk)) continue; seen.add(pk);
     picks.push(Object.assign({}, c, {stake:Math.max(0.1, Math.min(BET_CAP, Math.round(0.25*c.kelly*UNITS*10)/10)), held:held.has(pk)})); }
   const tot=picks.reduce((a,c)=>a+c.stake,0); if(tot>NIGHT_CAP) picks.forEach(c=>{ c.stake=Math.max(0.1, Math.floor(c.stake*NIGHT_CAP/tot*10)/10); });
   CARD=picks;
 }
-function logBet(c, stake){ if(bets.some(b=>b.result==='pending'&&b.game===c.game&&b.key===c.key&&b.market===c.market)) return false; const k=unitUsd();
+function logBet(c, stake){ if(bets.some(b=>b.result==='pending'&&b.game===c.game&&b.key===c.key&&statOf(b.market)===statOf(c.market))) return false;   // one bet per player per stat const k=unitUsd();
   bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*1e6), ts:new Date().toISOString(), ko:c.tip, ev:c.evId, game:c.game, key:c.key, player:c.name, market:c.market, odds:c.odds, book:c.book,
     modelProb:+c.mp.toFixed(4), rawP:+c.model.toFixed(4), ...(c.mkt!=null?{mktP:+c.mkt.toFixed(4)}:{}), pmu:+c.mu.toFixed(3), stake:+(+stake).toFixed(1), ...(k!=null?{usd:+(stake*k).toFixed(2)}:{}), closeOdds:'', result:'pending'});
   return true; }
@@ -706,7 +708,7 @@ function renderGame(){
   body.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(440px,100%),1fr));gap:16px">${col(g.away)}${col(g.home)}</div>`+
     (board?'':`<div class="muted" style="margin-top:8px;font-size:12px">No prices for this game yet — hit ⚡ on its chip (or Pull tonight).</div>`);
 }
-const verdictOf=c=>{ const pick=CARD.find(p=>p.game===c.game&&p.key===c.key&&p.market===c.market); return pick?`<span class="vb vb-take">★ BET ${stakeTxt(pick.stake)}</span>`:c.tier==='take'?'<span class="vb vb-edge" title="an edge, but not one of tonight\'s best (one per player, 2 per team, 3 per game)">edge</span>':c.tier==='flag'?'<span class="vb vb-flag" title="an edge this big usually means news the price hasn\'t caught up with — check the lineup and the goalie">⚠ check</span>':c.tier==='model'?'<span class="muted">model only</span>':c.tier==='dart'?'<span class="muted" title="under a 6% chance — too rare to price reliably, never bet">🎲 long shot</span>':c.tier==='nobet'?'<span class="muted" title="on last season\'s real prices, betting the anytime-goal prices that looked best lost 38% (183 bets): a book out of line on a scorer usually knows something">not bet (tested)</span>':'<span class="muted">pass</span>'; };
+const verdictOf=c=>{ const pick=CARD.find(p=>p.game===c.game&&p.key===c.key&&p.market===c.market); return pick?`<span class="vb vb-take">★ BET ${stakeTxt(pick.stake)}</span>`:c.tier==='take'?'<span class="vb vb-edge" title="an edge, but this player\'s stat is already on the card or in your log (one bet per player per stat)">edge</span>':c.tier==='flag'?'<span class="vb vb-flag" title="an edge this big usually means news the price hasn\'t caught up with — check the lineup and the goalie">⚠ check</span>':c.tier==='model'?'<span class="muted">model only</span>':c.tier==='dart'?'<span class="muted" title="under a 6% chance — too rare to price reliably, never bet">🎲 long shot</span>':c.tier==='nobet'?'<span class="muted" title="on last season\'s real prices, betting the anytime-goal prices that looked best lost 38% (183 bets): a book out of line on a scorer usually knows something">not bet (tested)</span>':'<span class="muted">pass</span>'; };
 let BOARDROWS=[];
 function renderBoard(){
   const all=CANDS.filter(c=>!c.dup), showAll=$('boardAll').checked, ord=c=>CARD.some(p=>p.game===c.game&&p.key===c.key&&p.market===c.market)?0:c.tier==='take'?1:c.tier==='flag'?2:3;
@@ -903,7 +905,7 @@ $('gameBody').addEventListener('change', e=>{ const day=(STATUS[SLATE_DAY]=STATU
   const gs=e.target.closest('.gsel'); if(gs){ day['G|'+gs.dataset.g+'|'+gs.dataset.t]=gs.value; lsW('nhlp_status', STATUS); renderAll(); } });
 $('boardBody').addEventListener('click', e=>{ const b=e.target.closest('.logrow'); if(!b) return; const c=BOARDROWS[+b.dataset.i]; if(!c) return; const pick=CARD.find(p=>p.game===c.game&&p.key===c.key&&p.market===c.market);
   if(logBet(c, pick?pick.stake:Math.max(0.1, Math.min(BET_CAP, Math.round(0.25*c.kelly*UNITS*10)/10)))) saveBets(); });
-$('boardAll').onchange=renderBoard; $('cardN').onchange=renderAll; $('pullAll').onclick=()=>pullAll(); $('settleNow').onclick=()=>autoSettle(true); $('closeNow').onclick=pullCloses;
+$('boardAll').onchange=renderBoard; $('pullAll').onclick=()=>pullAll(); $('settleNow').onclick=()=>autoSettle(true); $('closeNow').onclick=pullCloses;
 $('autoCloseChk').checked=AUTO.close; $('autoHistChk').checked=AUTO.hist;
 $('autoCloseChk').onchange=e=>{ AUTO.close=e.target.checked; lsW('nhlp_auto', AUTO); if(AUTO.close) autoCloses(); };
 $('autoHistChk').onchange=e=>{ AUTO.hist=e.target.checked; lsW('nhlp_auto', AUTO); if(AUTO.hist) autoCloses(); };
