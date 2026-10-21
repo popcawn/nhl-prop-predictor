@@ -220,7 +220,7 @@
   .bclink{margin-top:9px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
   /* the bet log fits its column — no sideways scroll bar (user, 2026-10-21): the bet and the close / CLV text wrap */
   table.logtbl td{white-space:normal} table.logtbl td.l{min-width:170px}
-  table.logtbl td.odds,table.logtbl td:nth-last-child(-n+4){white-space:nowrap}
+  table.logtbl td.odds,table.logtbl td:nth-last-child(-n+5){white-space:nowrap}
   .bclink .statussel,.bclink .ss{font-size:13px;padding:5px 11px!important}
   .unlog:hover{color:var(--bad)!important;border-color:var(--bad)!important;font-size:0!important} .unlog:hover::after{content:"✕ remove";font-size:12px}
   .bclink .bskip{color:var(--ink3)} .bclink .bskip:hover{color:var(--bad);border-color:var(--bad)}
@@ -458,6 +458,9 @@ const betUsd=b=>b.usd!=null?+b.usd:(BANK.amt?(+b.stake||0)*BANK.amt/UNITS:null);
 const betPl=b=>{ const d=oddsDec(b.odds)||1, u=BANK.amt?betUsd(b):(+b.stake||0); return b.result==='win'?u*(d-1):b.result==='loss'?-u:b.result==='push'?0:null; };
 function bankNow(){ if(!BANK.amt) return null; let x=BANK.amt; for(const b of allBets()) if(b.st>BANK.at){ const p=betPl(b); if(p!=null) x+=p; } return Math.max(0,x); }   // every sport's settled bets
 const unitUsd=()=>{ const n=bankNow(); return n!=null?n/UNITS:null; };
+// a stake in dollars exactly as the app shows it (whole $ from $20, half-dollars from $1, cents below) — what you actually bet,
+// so the log's P/L and "To win" match your book
+const roundUsd=x=>{ const a=Math.abs(x); return a>=20?Math.round(a):a>=1?Math.round(a*2)/2:Math.round(a*100)/100; };
 const fmtUsd=x=>{ const a=Math.abs(x); return (x<0?'−':'')+'$'+(a>=20?Math.round(a).toLocaleString():a>=1?(Math.round(a*2)/2).toFixed(Math.round(a*2)%2?2:0):a.toFixed(2)); };
 const stakeTxt=u=>{ const k=unitUsd(); return k!=null?fmtUsd(u*k):(Math.round(u*10)/10).toFixed(1)+'u'; };
 const betStakeTxt=b=>BANK.amt&&betUsd(b)!=null?fmtUsd(betUsd(b)):b.stake+'u';
@@ -687,7 +690,7 @@ function buildCard(){
 // one bet per player per stat: a second bet on the same player's stat (any line, either side) is refused
 function logBet(c, stake){ if(bets.some(b=>b.result==='pending'&&b.game===c.game&&b.key===c.key&&statOf(b.market)===statOf(c.market))) return false; const k=unitUsd();
   bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*1e6), ts:new Date().toISOString(), ko:c.tip, ev:c.evId, game:c.game, key:c.key, player:c.name, market:c.market, odds:c.odds, book:c.book,
-    modelProb:+c.mp.toFixed(4), rawP:+c.model.toFixed(4), ...(c.mkt!=null?{mktP:+c.mkt.toFixed(4)}:{}), pmu:+c.mu.toFixed(3), stake:+(+stake).toFixed(1), ...(k!=null?{usd:+(stake*k).toFixed(2)}:{}), closeOdds:'', result:'pending'});
+    modelProb:+c.mp.toFixed(4), rawP:+c.model.toFixed(4), ...(c.mkt!=null?{mktP:+c.mkt.toFixed(4)}:{}), pmu:+c.mu.toFixed(3), stake:+(+stake).toFixed(1), ...(k!=null?{usd:roundUsd(stake*k)}:{}), closeOdds:'', result:'pending'});
   return true; }
 
 // ---------------------------------------------------------------- rendering
@@ -781,7 +784,7 @@ const LOGOPEN=new Map();
 function renderBets(){
   const body=$('betBody'); renderBank();
   if(!bets.length){ body.innerHTML='<div class="muted">No bets yet. Log picks from the card or the 📓 buttons — results and CLV fill themselves in.</div>'; return; }
-  const g=v=>v>0?'ev-pos':(v<0?'ev-neg':''), sgn=v=>(v>=0?'+':'')+v, pc=v=>sgn((v*100).toFixed(1))+'%', usdOn=!!BANK.amt, mny=v=>usdOn?(v>=0?'+':'')+fmtUsd(v):sgn(v.toFixed(2))+'u', amt=v=>usdOn?fmtUsd(v):v.toFixed(1)+'u';
+  const g=v=>v>0?'ev-pos':(v<0?'ev-neg':''), sgn=v=>(v>=0?'+':'')+v, pc=v=>sgn((v*100).toFixed(1))+'%', usdOn=!!BANK.amt, mny=v=>usdOn?(v>=0?'+':'')+fmtUsd(v):sgn(v.toFixed(2))+'u', amt=v=>usdOn?fmtUsd(v):v.toFixed(1)+'u', amtc=v=>usdOn?'$'+v.toFixed(2):v.toFixed(2)+'u';
   const cg=v=>v>0?'ev-pos':v<0?'clv-bad':'', plPill=v=>`<span class="plpill ${v>0.004?'pos':v<-0.004?'neg':'zero'}">${mny(v)}</span>`;   // red = worse than the close; the pill = money won / lost
   const amtAny=b=>usdOn?(betUsd(b)||0):(+b.stake||0), plAny=b=>{ const d=oddsDec(b.odds)||1, u=amtAny(b); return b.result==='win'?u*(d-1):b.result==='loss'?-u:b.result==='push'?0:null; };
   // which sportsbook has made the most — every sport's settled bets (one pot)
@@ -791,8 +794,9 @@ function renderBets(){
   const bkTable=BK.length?`<table class="bkstat"><thead><tr><th class="l">Sportsbook</th><th>Bets</th><th>Record</th><th>Staked</th><th>Won / lost</th><th>ROI</th><th>CLV</th></tr></thead><tbody>${BK.map(o=>`<tr><td class="l"><b>${esc(bookName(o.k))}</b></td><td>${o.n}</td><td>${o.w}-${o.l}</td><td>${usdOn?fmtUsd(o.st):o.st.toFixed(1)+'u'}</td><td>${plPill(o.pl)}</td><td class="${o.st?(o.pl>0?'ev-pos':o.pl<0?'clv-bad':''):''}">${o.st?((o.pl/o.st>=0?'+':'')+(o.pl/o.st*100).toFixed(1)+'%'):'—'}</td><td class="${o.cn?cg(o.cs/o.cn):''}">${o.cn?((o.cs>=0?'+':'')+(o.cs/o.cn*100).toFixed(1)+'%'):'—'}</td></tr>`).join('')}</tbody></table>`:'<span class="muted">No settled bets yet.</span>';
   const rows=bets.map(b=>{ const dec=oddsDec(b.odds), cd=oddsDec(b.closeOdds), nd=!cd&&b.cur&&b.cur.q?oddsDec(b.cur.q):null;
     return {b, clv:dec&&cd?dec/cd-1:null, live:dec&&nd?dec/nd-1:null, stk:usdOn?(betUsd(b)||0):(+b.stake||0), pl:betPl(b)}; });
-  const agg=R=>{ let w=0,l=0,p=0,st=0,net=0,cs=0,cn=0,cp=0,open=0,spent=0,riding=0; for(const r of R){ const x=r.b.result; spent+=r.stk; if(x==='win'||x==='loss'){ x==='win'?w++:l++; st+=r.stk; net+=r.pl||0; } else if(x==='push') p++; else { open++; riding+=r.stk; } if(r.clv!=null){ cs+=r.clv; cn++; if(r.clv>0) cp++; } }
-    return {n:R.length,w,l,p,net,spent,riding,roi:st?net/st:null,clv:cn?cs/cn:null,cn,cp,open}; }, rec=a=>`${a.w}-${a.l}${a.p?'-'+a.p:''}`, A=agg(rows);
+  const agg=R=>{ let w=0,l=0,p=0,st=0,net=0,cs=0,cn=0,cp=0,open=0,spent=0,riding=0,towin=0; for(const r of R){ const x=r.b.result; spent+=r.stk; if(x==='win'||x==='loss'){ x==='win'?w++:l++; st+=r.stk; net+=r.pl||0; } else if(x==='push') p++; else { open++; riding+=r.stk; towin+=r.stk*((oddsDec(r.b.odds)||1)-1); } if(r.clv!=null){ cs+=r.clv; cn++; if(r.clv>0) cp++; } }
+    return {n:R.length,w,l,p,net,spent,riding,towin,roi:st?net/st:null,clv:cn?cs/cn:null,cn,cp,open}; }, rec=a=>`${a.w}-${a.l}${a.p?'-'+a.p:''}`, A=agg(rows);
+const cnt=a=>a.open===a.n?`${a.n} open bet${a.n>1?'s':''}`:`${a.n} bet${a.n>1?'s':''}${a.open?` · ${a.open} open`:''}`;   // "52 bets · 52 open" -> "52 open bets"
   let html=`<div class="logsum"><span>Record <b>${rec(A)}</b></span>${BK.length>1?`<span title="every sport's settled bets, by the book they were placed at">🏆 Best book <b>${esc(bookName(BK[0].k))}</b> ${plPill(BK[0].pl)}</span>`:''}<span>Spent <b>${amt(A.spent)}</b></span><span>Won/lost ${plPill(A.net)}</span><span>ROI <b class="${g(A.roi)}">${A.roi==null?'—':pc(A.roi)}</b></span>`+
     `<span title="how much better your price was than the closing price">CLV <b class="${g(A.clv)}">${A.clv==null?'—':pc(A.clv)}</b>${A.cn?` <span class="muted">(${Math.round(A.cp/A.cn*100)}% beat the close)</span>`:''}</span>${A.open?`<span><b>${A.open}</b> open</span>`:''}</div>`;
   // weeks (Monday -> Sunday) -> nights -> bets, like the NFL app's weeks -> games: each week opens with its money line;
@@ -802,20 +806,20 @@ function renderBets(){
   const tonight=SLATE_DAY?new Date(+SLATE_DAY.slice(0,4), +SLATE_DAY.slice(4,6)-1, +SLATE_DAY.slice(6,8)).getTime():null;
   const weeks=new Map(); for(const r of rows){ const w=weekOf(dayOf(r.b)); (weeks.get(w)||weeks.set(w,[]).get(w)).push(r); }
   const upTo=new Map(); { let sp=0, nt=0; for(const w of [...weeks.keys()].sort((a,b)=>a-b)){ const a=agg(weeks.get(w)); sp+=a.spent; nt+=a.net; upTo.set(w,{spent:sp, net:nt}); } }
-  const table=R=>`<div class="scroll"><table class="logtbl"><thead><tr><th class="l">Bet</th><th>Odds</th><th>Close · CLV</th><th>Stake</th><th>Result</th><th>P/L</th><th></th></tr></thead><tbody>`+
-      R.map(({b,clv,live,pl})=>{ const mine=+String(b.market).split('|')[3], moved=b.cur&&b.cur.l!=null&&b.cur.l!==mine, arrow=moved?(b.cur.l<mine?'▼':'▲')+b.cur.l+' ':'';
+  const table=R=>`<div class="scroll"><table class="logtbl"><thead><tr><th class="l">Bet</th><th>Odds</th><th>Close · CLV</th><th>Stake</th><th title="what each bet pays in profit if it wins">To win</th><th>Result</th><th>P/L</th><th></th></tr></thead><tbody>`+
+      R.map(({b,clv,live,pl,stk})=>{ const mine=+String(b.market).split('|')[3], moved=b.cur&&b.cur.l!=null&&b.cur.l!==mine, arrow=moved?(b.cur.l<mine?'▼':'▲')+b.cur.l+' ':'';
         const sideOf=String(b.market).split('|')[2], against=moved&&((sideOf==='U'&&b.cur.l>mine)||(sideOf==='O'&&b.cur.l<mine)), arrowH=moved?`<span class="${against?'clv-bad':'ev-pos'}" title="${against?'the line moved against your bet':'the line moved your way'}">${arrow.trim()}</span> `:'';
         const clvTxt=clv!=null?` <b class="${cg(clv)}">${pc(clv)}</b>${b.closeEst?'<span class="muted" title="the line moved — this is the equivalent price at your line"> ≈</span>':''}`:b.result!=='pending'||!b.cur?'':live!=null?` <span class="${cg(live)}" style="font-size:12px" title="${esc((moved?`the line moved to ${b.cur.l} (${b.cur.o}) — about ${b.cur.q} at your line. `:`now ${b.cur.q}. `)+'A live read, not final until the close.')}">${arrowH}<span class="muted">≈ ${esc(b.cur.q)} ${moved?'at your '+mine:'now'} ·</span> ${pc(live)}</span>`:moved?` <span style="font-size:12px">${arrowH}</span>`:'';
-        return `<tr><td class="l"><b title="chance when logged: ${b.modelProb!=null?pct(b.modelProb):'—'}">${esc(b.player)}</b> <span class="muted">${mktLabel(b.market)} · ${esc(fmtGame(b.game))}</span>${b.offBoard&&b.result==='pending'?' <span style="color:var(--warn);font-size:12px" title="your book no longer offers this prop">⚠ off the board</span>':''}</td>`+
+        return `<tr><td class="l"><b title="chance when logged: ${b.modelProb!=null?pct(b.modelProb):'—'}">${esc(b.player)}</b> <span class="muted" title="${esc(fmtGame(b.game))}">${mktLabel(b.market)}</span>${b.offBoard&&b.result==='pending'?' <span style="color:var(--warn);font-size:12px" title="your book no longer offers this prop">⚠ off the board</span>':''}</td>`+
           `<td class="odds">${esc(b.odds)}${bkBadge(b.book)}</td><td><input class="betclose" data-id="${b.id}" value="${esc(b.closeOdds||'')}" placeholder="close"${b.closeSrc?` title="${b.closeSrc==='hist'?'your book 5 min before the start (price history)':'your book in the last 15 min before the start'}"`:''} style="width:62px;font-family:var(--mono);font-size:13px;text-align:right">${clvTxt}</td>`+
-          `<td title="${b.stake}u">${betStakeTxt(b)}</td><td><select class="betres ss" data-id="${b.id}">${['pending','win','loss','push'].map(x=>`<option${x===b.result?' selected':''}>${x}</option>`).join('')}</select>${b.auto&&b.result!=='pending'?` <span title="${esc('settled from ESPN: '+b.auto)}">🤖</span>`:''}${b.result==='pending'&&b.autoNote?` <span title="${esc(b.autoNote)}" style="cursor:help">✋</span>`:''}</td>`+
+          `<td title="${b.stake}u">${betStakeTxt(b)}</td><td class="${b.result==='pending'?'':'muted'}">${amtc(stk*((oddsDec(b.odds)||1)-1))}</td><td><select class="betres ss" data-id="${b.id}">${['pending','win','loss','push'].map(x=>`<option${x===b.result?' selected':''}>${x}</option>`).join('')}</select>${b.auto&&b.result!=='pending'?` <span title="${esc('settled from ESPN: '+b.auto)}">🤖</span>`:''}${b.result==='pending'&&b.autoNote?` <span title="${esc(b.autoNote)}" style="cursor:help">✋</span>`:''}</td>`+
           `<td class="${pl!=null?g(pl):''}">${pl==null?'—':mny(pl)}</td><td><button class="ss betdel" data-id="${b.id}" style="color:var(--warn)">✕</button></td></tr>`; }).join('')+`</tbody></table></div>`;
   [...weeks.keys()].sort((a,b)=>b-a).forEach((ws,wi)=>{ const R=weeks.get(ws), a=agg(R), wOpen=LOGOPEN.has('W'+ws)?LOGOPEN.get('W'+ws):(wi===0||a.open>0);
-    html+=`<details class="weekgrp" data-w="${ws}"${wOpen?' open':''}><summary><b>Week of ${fmtD(ws)}</b>${a.w+a.l?plPill(a.net):''} <span class="muted">· ${a.n} bet${a.n>1?'s':''}${a.open?` · ${a.open} open`:''}${a.w+a.l?` · ${rec(a)}`:''}</span>${a.clv!=null?` <span class="muted">· CLV</span> <b class="${g(a.clv)}">${pc(a.clv)}</b>`:''}`+
-      `<span class="wktally">💵 Spent <b>${amt(a.spent)}</b>${a.riding?` · <span class="muted">${amt(a.riding)} still riding</span>`:''}</span></summary><div class="wkbody">`;
+    html+=`<details class="weekgrp" data-w="${ws}"${wOpen?' open':''}><summary><b>Week of ${fmtD(ws)}</b>${a.w+a.l?plPill(a.net):''} <span class="muted">· ${cnt(a)}${a.w+a.l?` · ${rec(a)}`:''}</span>${a.clv!=null?` <span class="muted">· CLV</span> <b class="${g(a.clv)}">${pc(a.clv)}</b>`:''}`+
+      `<span class="wktally">💵 Spent <b>${amt(a.spent)}</b>${a.riding?` · <span class="muted">${amt(a.riding)} still riding · could win ${amt(a.towin)}</span>`:''}</span></summary><div class="wkbody">`;
     const days=new Map(); for(const r of R){ const k=dayOf(r.b); (days.get(k)||days.set(k,[]).get(k)).push(r); }
     [...days.keys()].sort((x,y)=>y-x).forEach(dk=>{ const D=days.get(dk), da=agg(D), open=LOGOPEN.has(dk)?LOGOPEN.get(dk):false;
-      html+=`<details class="daygrp${dk===tonight?' curday':''}" data-d="${dk}"${open?' open':''}><summary><b>${new Date(dk).toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'})}</b> <span class="muted">· ${da.n} bet${da.n>1?'s':''}${da.open?` · ${da.open} open`:''}${da.w+da.l?` · ${rec(da)}`:''} · spent ${amt(da.spent)}</span>${da.w+da.l?` <b class="${g(da.net)}">${mny(da.net)}</b>`:''}</summary>`+table(D)+'</details>'; });
+      html+=`<details class="daygrp${dk===tonight?' curday':''}" data-d="${dk}"${open?' open':''}><summary><b>${new Date(dk).toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'})}</b> <span class="muted">· ${cnt(da)}${da.w+da.l?` · ${rec(da)}`:''} · spent ${amt(da.spent)}${da.open?` · could win ${amt(da.towin)}`:''}</span>${da.w+da.l?` <b class="${g(da.net)}">${mny(da.net)}</b>`:''}</summary>`+table(D)+'</details>'; });
     html+='</div></details>'; });
   body.innerHTML=html; const bs=$('bookStats'); if(bs) bs.innerHTML=bkTable;
 }
