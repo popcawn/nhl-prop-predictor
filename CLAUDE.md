@@ -115,6 +115,9 @@ bet-log history). See README.md for the model and its backtest.
   page to the next instead of showing a half-drawn one.
 - The ⚡ Bets list draws ONLY new bets (user, 2026-10-21: "logged bets shouldnt be shown. Only new bets"); the status line
   still counts the logged ones ("· 1 already in your log") and the log has them. Your card (NFL game tab) still shows both.
+- The ⚡ Bets list is grouped BY SPORTSBOOK (user, 2026-10-21: "doesnt need to stacked. or even seperated by game … if
+  anything seperate by book"): FanDuel, DraftKings, BetMGM, Caesars, Fanatics; each section is one grid of cards with an
+  "Open all N on <book>" button, and each card names its game and start time. Fanatics (no slip link) opens its home page.
 
 ## The user
 - Bets FanDuel + DraftKings (+ BetMGM), wants "what do I bet and how much, in dollars", gets overwhelmed — keep the card

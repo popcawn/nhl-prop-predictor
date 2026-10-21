@@ -189,6 +189,8 @@
   .bacts .statussel,.bacts .ss{padding:9px 15px!important;font-size:14px;border-radius:11px}
   .bgame{display:flex;align-items:center;gap:10px;margin:18px 0 9px;font-size:12.5px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--ink3)}
   .bgame:after{content:"";flex:1;height:1px;background:var(--line2)}
+  .bgame:after{order:1} .bgame .bgo{order:2;text-transform:none;letter-spacing:0;font-weight:600;display:flex;gap:6px;flex-wrap:wrap}
+  .bgame .bgo .statussel,.bgame .bgo .ss{font-size:13px;padding:5px 12px!important}
   .bcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px;margin-top:10px}
   .bgame+.bcards{margin-top:0}
   .bcard{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:13px 15px 12px 19px;box-shadow:var(--shadow);overflow:hidden;transition:transform .12s ease,border-color .12s ease}
@@ -733,6 +735,11 @@ function betCard(o){ const w=x=>Math.max(0,Math.min(100,x*100)).toFixed(1);
     (o.note?`<div class="bcwhy">${o.note}</div>`:'')+
     (o.link?`<div class="bclink">${o.link}</div>`:'')+'</article>'; }
 const tipTime=g=>{ const x=gameOf(g); return x&&x.tip?new Date(x.tip).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}):''; };
+// one grid per sportsbook (user, 2026-10-21: "doesnt need to stacked. or even seperated by game … if anything seperate
+// by book"): each book's bets fill the rows under one button that opens them all there; each card names its game
+const BOOK_ORDER=['fanduel','draftkings','betmgm','williamhill_us','fanatics'];
+function byBook(L){ const m=new Map(); for(const c of L){ const b=c.book||'fanduel'; (m.get(b)||m.set(b,[]).get(b)).push(c); }
+  const o=b=>{ const i=BOOK_ORDER.indexOf(b); return i<0?99:i; }; return [...m].sort((x,y)=>o(x[0])-o(y[0])); }
 function renderCard(){
   const body=$('cardBody'), any=Object.keys(BOARDS).some(g=>gameOf(g));
   if(!CARD.length){ const open=bets.filter(b=>b.result==='pending'&&gameOf(b.game)).length;
@@ -742,9 +749,10 @@ function renderCard(){
   body.innerHTML=(un.length?cardStat('new',`🆕 ${un.length} NEW BET${un.length>1?'S':''}`, `${stakeTxt(un.reduce((a,c)=>a+c.stake,0))} to bet${nIn?` · ${nIn} already logged`:''}`):cardStat('done','✅ NO NEW BETS',`${CARD.length>1?'all '+CARD.length+' bets on the card are':'the bet on the card is'} already in your log`))+
     // only new bets are drawn (user, 2026-10-21: "logged bets shouldnt be shown. Only new bets") — the log has the rest
     (un.length?`<div class="muted" style="font-size:13px;margin:-2px 0 8px">${nIn?`Tonight ${stakeTxt(tot)} in all · `:''}${tot.toFixed(1)}% of bankroll (the cap is ${NIGHT_CAP}%) · best bet first</div>`+
-    `<div class="bacts"><button class="ss" id="cardLog">📓 Log ${un.length===CARD.length?'these '+un.length:'the '+un.length+' new'}</button>${linkButtons(un, 'Open on')}</div>`:'')+
-    `<div class="bcards">`+un.map(c=>betCard({nw:true, tc:teamColor(c.abbr), name:(CARD.indexOf(c)?'':'★ ')+c.name, mkt:mktLabel(c.market), sub:`${esc(fmtGame(c.game))}${tipTime(c.game)?' · '+tipTime(c.game):''}`, odds:c.odds, book:c.book, stake:c.stake,
-      conf:confBadge(c.conf), mp:c.mp, bimp:c.bimp, ev:c.ev, link:linkButtons([c], 'Open on')})).join('')+'</div>';
+    `<div class="bacts"><button class="ss" id="cardLog">📓 Log ${un.length===CARD.length?'these '+un.length:'the '+un.length+' new'}</button></div>`:'')+
+    byBook(un).map(([b,L])=>`<div class="bgame">${esc(bookName(b))} · ${L.length} bet${L.length>1?'s':''} · ${stakeTxt(L.reduce((a,c)=>a+c.stake,0))}${L.length>1?`<span class="bgo">${linkButtons(L, `Open all ${L.length} on`)}</span>`:''}</div>`+
+    `<div class="bcards">`+L.map(c=>betCard({nw:true, tc:teamColor(c.abbr), name:(CARD.indexOf(c)?'':'★ ')+c.name, mkt:mktLabel(c.market), sub:`${esc(fmtGame(c.game))}${tipTime(c.game)?' · '+tipTime(c.game):''}`, odds:c.odds, book:c.book, stake:c.stake,
+      conf:confBadge(c.conf), mp:c.mp, bimp:c.bimp, ev:c.ev, link:linkButtons([c], 'Open on')})).join('')+'</div>').join('');
   const cl=$('cardLog'); if(cl) cl.onclick=()=>{ let n=0; for(const c of CARD) if(!c.held&&logBet(c, c.stake)) n++; if(n) saveBets(); };
 }
 // ---- bet log: one summary line, then days -> bets
