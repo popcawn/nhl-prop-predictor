@@ -219,6 +219,9 @@
   .bcwhy b.ev-pos{color:var(--good)}
   .bclink{margin-top:9px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
   .bclink .statussel,.bclink .ss{font-size:13px;padding:5px 11px!important}
+  .bclink .bskip{color:var(--ink3)} .bclink .bskip:hover{color:var(--bad);border-color:var(--bad)}
+  .bcfloor{margin-left:auto;font-size:12.5px;color:var(--ink3);white-space:nowrap} .bcfloor b{font-family:var(--mono);color:var(--ink2)}
+  .skipnote{margin-top:14px;font-size:13px;color:var(--ink3);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   @media(max-width:760px){
     .topin{gap:8px;padding:8px 12px}
     .brand{font-size:17px} .brand i{width:22px;height:22px}
@@ -664,10 +667,17 @@ const statOf=m=>String(m||'').split('|')[1];   // 'P|sog|O|2.5' -> 'sog'
 // every take (user, 2026-10-21: "remove show up to, show all take bets"): no count, team or game limit — one bet per
 // player per stat (a stat already in your log holds it, whatever the line); the night cap still scales the stakes
 // down when there are many, so the night's total risk doesn't grow
+// ✕ Skip (user, 2026-10-21: "should it be a removed button … when i recheck for bets it doesnt pop up again"): a bet you pass
+// on stays off the card for that game — through re-pulls — keyed game + player + stat; "↩ Bring back" undoes it. Kept 4 days.
+let SKIP=(o=>{ const old=Date.now()-4*864e5; for(const k of Object.keys(o)) if(!(o[k]>old)) delete o[k]; return o; })(lsJ('nhlp_skip', {})||{});
+const skipKey=c=>c.game+'|'+c.key+'|'+statOf(c.market);
+const skipBtn=c=>`<button class="ss bskip" data-skip="${esc(skipKey(c))}" title="hide this bet — it stays hidden when you pull again tonight">✕ Skip</button>`;
+const nightSkips=()=>Object.keys(SKIP).filter(k=>gameOf(k.split('|')[0]));
+const skippedNote=()=>{ const n=nightSkips().length; return n?`<div class="skipnote">${n} skipped tonight <button class="ss" id="unskip">↩ Bring ${n>1?'them':'it'} back</button></div>`:''; };
 function buildCard(){
   const held=new Set(bets.filter(b=>b.result==='pending').map(b=>b.game+'|'+b.key+'|'+statOf(b.market))), picks=[], seen=new Set();
   for(const c of CANDS.filter(c=>c.tier==='take'&&!c.dup).sort((a,b)=>b.kelly-a.kelly)){ const pk=c.game+'|'+c.key+'|'+statOf(c.market);
-    if(seen.has(pk)) continue; seen.add(pk);
+    if(seen.has(pk)||SKIP[pk]) continue; seen.add(pk);
     picks.push(Object.assign({}, c, {stake:Math.max(0.1, Math.min(BET_CAP, Math.round(0.25*c.kelly*UNITS*10)/10)), held:held.has(pk)})); }
   const tot=picks.reduce((a,c)=>a+c.stake,0); if(tot>NIGHT_CAP) picks.forEach(c=>{ c.stake=Math.max(0.1, Math.floor(c.stake*NIGHT_CAP/tot*10)/10); });
   CARD=picks;
@@ -708,7 +718,7 @@ function renderGame(){
   body.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(440px,100%),1fr));gap:16px">${col(g.away)}${col(g.home)}</div>`+
     (board?'':`<div class="muted" style="margin-top:8px;font-size:12px">No prices for this game yet — hit ⚡ on its chip (or Pull tonight).</div>`);
 }
-const verdictOf=c=>{ const pick=CARD.find(p=>p.game===c.game&&p.key===c.key&&p.market===c.market); return pick?`<span class="vb vb-take">★ BET ${stakeTxt(pick.stake)}</span>`:c.tier==='take'?'<span class="vb vb-edge" title="an edge, but this player\'s stat is already on the card or in your log (one bet per player per stat)">edge</span>':c.tier==='flag'?'<span class="vb vb-flag" title="an edge this big usually means news the price hasn\'t caught up with — check the lineup and the goalie">⚠ check</span>':c.tier==='model'?'<span class="muted">model only</span>':c.tier==='dart'?'<span class="muted" title="under a 6% chance — too rare to price reliably, never bet">🎲 long shot</span>':c.tier==='nobet'?'<span class="muted" title="on last season\'s real prices, betting the anytime-goal prices that looked best lost 38% (183 bets): a book out of line on a scorer usually knows something">not bet (tested)</span>':'<span class="muted">pass</span>'; };
+const verdictOf=c=>{ if(SKIP[skipKey(c)]) return '<span class="muted" title="you skipped it on the Bets tab — ↩ Bring back is under the bets">skipped</span>'; const pick=CARD.find(p=>p.game===c.game&&p.key===c.key&&p.market===c.market); return pick?`<span class="vb vb-take">★ BET ${stakeTxt(pick.stake)}</span>`:c.tier==='take'?'<span class="vb vb-edge" title="an edge, but this player\'s stat is already on the card or in your log (one bet per player per stat)">edge</span>':c.tier==='flag'?'<span class="vb vb-flag" title="an edge this big usually means news the price hasn\'t caught up with — check the lineup and the goalie">⚠ check</span>':c.tier==='model'?'<span class="muted">model only</span>':c.tier==='dart'?'<span class="muted" title="under a 6% chance — too rare to price reliably, never bet">🎲 long shot</span>':c.tier==='nobet'?'<span class="muted" title="on last season\'s real prices, betting the anytime-goal prices that looked best lost 38% (183 bets): a book out of line on a scorer usually knows something">not bet (tested)</span>':'<span class="muted">pass</span>'; };
 let BOARDROWS=[];
 function renderBoard(){
   const all=CANDS.filter(c=>!c.dup), showAll=$('boardAll').checked, ord=c=>CARD.some(p=>p.game===c.game&&p.key===c.key&&p.market===c.market)?0:c.tier==='take'?1:c.tier==='flag'?2:3;
@@ -727,6 +737,12 @@ function renderBoard(){
 }
 const cardStat=(cls,big,small)=>`<div class="cardstat ${cls}">${big}${small?` <span>${small}</span>`:''}</div>`;
 function isDim(){ return document.documentElement.dataset.theme==='dim'; }   // the 🌙 look (light is the default)
+// the worst price that still makes this a bet by the card's own rule (EV of 3% and 1.5 points more chance than the price) — check it against the price in the
+// slip: if the slip is worse, skip the bet (user, 2026-10-21: FanDuel showed +104 for a +114 card bet)
+const MIN_EDGE=0.015;
+function floorPrice(p, minEdge){ if(!(p>minEdge&&p<1)) return null; const d=Math.max(1.03/p, minEdge?1/(p-minEdge):0)+1e-9;
+  return d>=2 ? '+'+Math.ceil((d-1)*100) : '-'+Math.floor(100/(d-1)); }
+const floorTxt=c=>{ const f=floorPrice(c.mp, MIN_EDGE); return f?`<span class="bcfloor" title="still a bet down to this price — if the slip shows a worse price, skip it">bet at <b>${f}</b> or better</span>`:''; };
 function betCard(o){ const w=x=>Math.max(0,Math.min(100,x*100)).toFixed(1);
   return `<article class="bcard ${o.nw?'new':'done'} ${o.cls||''}" style="--tc:${o.tc}" ${o.attrs||''}>`+
     `<div class="bc1"><span class="bcwho">${esc(o.name)}</span>${o.nw?'<span class="newtag">NEW</span>':'<span class="bcin">✓ IN LOG</span>'}${o.conf||''}</div>`+
@@ -735,7 +751,7 @@ function betCard(o){ const w=x=>Math.max(0,Math.min(100,x*100)).toFixed(1);
     (o.mp!=null&&o.bimp!=null?`<div class="bcbar" title="bar = its chance (${pct(o.mp)}) · line = the chance the price pays for (${pct(o.bimp)})"><i style="width:${w(o.mp)}%"></i><u style="left:${w(o.bimp)}%"></u></div>`+
       `<div class="bcwhy"><span>chance <b>${pct(o.mp)}</b> · price <b>${pct(o.bimp)}</b></span>${o.ev!=null?`<span>EV <b class="${o.ev>0?'ev-pos':''}">${o.ev>=0?'+':''}${(o.ev*100).toFixed(1)}%</b></span>`:''}</div>`:'')+
     (o.note?`<div class="bcwhy">${o.note}</div>`:'')+
-    (o.link?`<div class="bclink">${o.link}</div>`:'')+'</article>'; }
+    (o.link||o.extra?`<div class="bclink">${o.link||''}${o.extra||''}</div>`:'')+'</article>'; }
 const tipTime=g=>{ const x=gameOf(g); return x&&x.tip?new Date(x.tip).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}):''; };
 // one grid per sportsbook (user, 2026-10-21: "doesnt need to stacked. or even seperated by game … if anything seperate
 // by book"): each book's bets fill the rows under one button that opens them all there; each card names its game
@@ -746,7 +762,7 @@ function renderCard(){
   const body=$('cardBody'), any=Object.keys(BOARDS).some(g=>gameOf(g));
   if(!CARD.length){ const open=bets.filter(b=>b.result==='pending'&&gameOf(b.game)).length;
     body.innerHTML=any?(open?cardStat('done','✅ NO NEW BETS',`you have ${open} open bet${open>1?'s':''} tonight — nothing new clears the bar`):cardStat('none','NO BETS TONIGHT','nothing clears the bar'))+'<div class="muted" style="font-size:14px">Nothing at your books beats what the other books say it\'s worth by enough — that\'s the normal case.</div>'
-      :'<div class="muted" style="font-size:14px">Pull tonight\'s prices and the best few bets across every game show up here, with stakes and links.</div>'; return; }
+      :'<div class="muted" style="font-size:14px">Pull tonight\'s prices and the best few bets across every game show up here, with stakes and links.</div>'; body.innerHTML+=skippedNote(); return; }
   const tot=CARD.reduce((a,c)=>a+c.stake,0), un=CARD.filter(c=>!c.held), nIn=CARD.length-un.length;
   body.innerHTML=(un.length?cardStat('new',`🆕 ${un.length} NEW BET${un.length>1?'S':''}`, `${stakeTxt(un.reduce((a,c)=>a+c.stake,0))} to bet${nIn?` · ${nIn} already logged`:''}`):cardStat('done','✅ NO NEW BETS',`${CARD.length>1?'all '+CARD.length+' bets on the card are':'the bet on the card is'} already in your log`))+
     // only new bets are drawn (user, 2026-10-21: "logged bets shouldnt be shown. Only new bets") — the log has the rest
@@ -754,7 +770,7 @@ function renderCard(){
     `<div class="bacts"><button class="ss" id="cardLog">📓 Log ${un.length===CARD.length?'these '+un.length:'the '+un.length+' new'}</button></div>`:'')+
     byBook(un).map(([b,L])=>`<div class="bgame">${esc(bookName(b))} · ${L.length} bet${L.length>1?'s':''} · ${stakeTxt(L.reduce((a,c)=>a+c.stake,0))}${L.length>1?`<span class="bgo">${linkButtons(L, `Open all ${L.length} on`)}</span>`:''}</div>`+
     `<div class="bcards">`+L.map(c=>betCard({nw:true, tc:teamColor(c.abbr), name:(CARD.indexOf(c)?'':'★ ')+c.name, mkt:mktLabel(c.market), sub:`${esc(fmtGame(c.game))}${tipTime(c.game)?' · '+tipTime(c.game):''}`, odds:c.odds, book:c.book, stake:c.stake,
-      conf:confBadge(c.conf), mp:c.mp, bimp:c.bimp, ev:c.ev, link:linkButtons([c], 'Open on')})).join('')+'</div>').join('');
+      conf:confBadge(c.conf), mp:c.mp, bimp:c.bimp, ev:c.ev, link:linkButtons([c], 'Open on'), extra:skipBtn(c)+floorTxt(c)})).join('')+'</div>').join('')+skippedNote();
   const cl=$('cardLog'); if(cl) cl.onclick=()=>{ let n=0; for(const c of CARD) if(!c.held&&logBet(c, c.stake)) n++; if(n) saveBets(); };
 }
 // ---- bet log: one summary line, then days -> bets
@@ -905,6 +921,8 @@ $('gameBody').addEventListener('change', e=>{ const day=(STATUS[SLATE_DAY]=STATU
   const gs=e.target.closest('.gsel'); if(gs){ day['G|'+gs.dataset.g+'|'+gs.dataset.t]=gs.value; lsW('nhlp_status', STATUS); renderAll(); } });
 $('boardBody').addEventListener('click', e=>{ const b=e.target.closest('.logrow'); if(!b) return; const c=BOARDROWS[+b.dataset.i]; if(!c) return; const pick=CARD.find(p=>p.game===c.game&&p.key===c.key&&p.market===c.market);
   if(logBet(c, pick?pick.stake:Math.max(0.1, Math.min(BET_CAP, Math.round(0.25*c.kelly*UNITS*10)/10)))) saveBets(); });
+$('cardBody').addEventListener('click', e=>{ const b=e.target.closest('.bskip'); if(b){ SKIP[b.dataset.skip]=Date.now(); lsW('nhlp_skip', SKIP); renderAll(); return; }
+  if(e.target.closest('#unskip')){ for(const k of nightSkips()) delete SKIP[k]; lsW('nhlp_skip', SKIP); renderAll(); } });
 $('boardAll').onchange=renderBoard; $('pullAll').onclick=()=>pullAll(); $('settleNow').onclick=()=>autoSettle(true); $('closeNow').onclick=pullCloses;
 $('autoCloseChk').checked=AUTO.close; $('autoHistChk').checked=AUTO.hist;
 $('autoCloseChk').onchange=e=>{ AUTO.close=e.target.checked; lsW('nhlp_auto', AUTO); if(AUTO.close) autoCloses(); };

@@ -121,6 +121,11 @@ bet-log history). See README.md for the model and its backtest.
 - Tonight's card shows EVERY take (user, 2026-10-21: "remove show up to, show all take bets"): no bets-a-night select, no
   team or game limit — one bet per player per STAT (statOf(); a stat in your log holds it at any line; logBet refuses a
   second). NIGHT_CAP (12%) still scales the stakes down when there are many, so the night's total risk doesn't grow.
+- ✕ Skip + "bet at X or better" (user, 2026-10-21: FanDuel showed +104 for a +114 card bet — "should it be a removed
+  button … when i recheck for bets it doesnt pop up again"): each card has ✕ Skip (SKIP map in localStorage *_skip, key
+  game|player|stat, kept 4 days NBA/NHL, 8 NFL) — the bet stays hidden through re-pulls; "↩ Bring back" under the list undoes
+  it. floorPrice() = the worst price that still passes the card's rule (EV > 3%; NBA/NHL also 1.5 points of edge), shown
+  as "bet at +110 or better" so the user can compare with the slip. NFL: Your card on the game tab ignores skips.
 
 ## The user
 - Bets FanDuel + DraftKings (+ BetMGM), wants "what do I bet and how much, in dollars", gets overwhelmed — keep the card
