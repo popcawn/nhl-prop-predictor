@@ -546,13 +546,13 @@ const abbrByName=name=>S.teamList.find(a=>normName(S.teams[a].name)===normName(n
 const tkOf=(b,o)=>{ const t={b, o:fmtAm(o.price)}; if(b==='fanduel'){ const m=o.link&&/marketId[^=]*=([^&]+)/.exec(o.link); if(m&&o.sid){ t.m=decodeURIComponent(m[1]); t.s=String(o.sid); } } else if(o.sid) t.s=String(o.sid);
   if(b==='betmgm'){ const g=/[?&]options=([^&]+)/.exec(o.link||''); if(g) t.g=decodeURIComponent(g[1]); } return t; };
 const FD_SLIP='https://sportsbook.fanduel.com/addToBetslip', BOOK_HOME={fanatics:'https://sportsbook.fanatics.com/'};
-// BetMGM: /en/sportsapp/sports?… opens the BetMGM app on a phone (the app claims only /sportsapp/ addresses — without it, links
-// opened in Safari: user 2026-10-22); with no app installed their site redirects it to the normal bet slip. A single bet also
-// carries its stake (BetMGM's deep links take &stake=), so the slip opens with the amount filled in.
+// BetMGM: the bet slip on their site, and a single bet carries its stake (&stake=) so it opens with the amount filled in (tested on
+// the user's iPhone 2026-10-22). No link opens the BetMGM app there: /sportsapp/ addresses and betmgm.onelink.me app links were
+// tried — the first open Safari, the second the App Store — and the app's private link type isn't published.
 function bookLink(book, tks, usd){ if(!tks.length) return null; const st=String(CFG.state||'').toLowerCase();
   if(book==='fanduel'){ if(tks.some(x=>!x.m||!x.s)) return null; return tks.length===1?`${FD_SLIP}?marketId=${encodeURIComponent(tks[0].m)}&selectionId=${encodeURIComponent(tks[0].s)}`:FD_SLIP+'?'+tks.map((x,i)=>`marketId[${i}]=${encodeURIComponent(x.m)}&selectionId[${i}]=${encodeURIComponent(x.s)}`).join('&'); }
   if(book==='draftkings'){ if(tks.some(x=>!x.s)) return null; return 'https://sportsbook.draftkings.com/?outcomes='+tks.map(x=>encodeURIComponent(x.s)).join('+'); }
-  if(book==='betmgm'){ if(!st||tks.some(x=>!x.g)) return null; return `https://sports.${st}.betmgm.com/en/sportsapp/sports?options=${tks.map(x=>x.g).join(',')}&type=Single${usd&&tks.length===1?'&stake='+usd:''}`; }
+  if(book==='betmgm'){ if(!st||tks.some(x=>!x.g)) return null; return `https://sports.${st}.betmgm.com/en/sports?options=${tks.map(x=>x.g).join(',')}&type=Single${usd&&tks.length===1?'&stake='+usd:''}`; }
   if(book==='williamhill_us'){ if(!st||tks.some(x=>!x.s)) return null; return `https://sportsbook.caesars.com/us/${st}/bet/betslip?selectionIds=${tks.map(x=>encodeURIComponent(x.s)).join(',')}`; }
   return null; }
 // buttons that open these picks in their book's bet slip (one per book); Fanatics has no slip link — open it and find the bet
