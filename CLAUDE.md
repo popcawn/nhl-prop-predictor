@@ -52,6 +52,29 @@ bet-log history). See README.md for the model and its backtest.
 - Phone tab bar: sections carry `data-m` card | games | priced | bets in the HTML.
 - `autoSettle()`: ESPN summary by `b.ev`; keys `shotsTotal` / `goals` / `assists`; a skater not in the box = scratched → void.
 
+## Filters + 🕶 background log (2026-10-23, user: "add both filters … these bets will still be pulled but not shown to me
+## and logged to your own bet sheet … if the trend changes you can tell me")
+- FILTERS = {fdOnly: the edge is at FanDuel and no other book of the user's has that price, ev10: EV ≥ 10%}. On last
+  season's real prices (299 games, all 5 of the user's books) the app's rule made only 34 bets (−17.7%): FanDuel-alone
+  16 bets −58% (down in both halves), 10%+ EV 0 for 3; BetMGM-best +10.9% on 13. Tiny samples — the NHL has no proven
+  edge; the filters cut the worst of it. `parseBoard()`'s best price carries `solo` (no other book of yours matches it
+  at that line); candidates carry `solo`.
+- A filtered take gets `tier='filtered'` + `c.why` (filter keys) in `buildCands()` (after the tiers, before the
+  same-side de-dup, where an unfiltered price at another book wins over a filtered one). Never on the card; on the Priced
+  list only with "show prices with no edge" (verdict 🕶 filtered). Toggles: `.filtchk` under odds settings → `FILT`
+  (localStorage `nhlp_filt`), default ON. The 📓 button can still log one by hand.
+- 🕶 BACKGROUND LOG (`SHADOW`, localStorage `nhlp_shadow`): `recordShadow()` (end of `buildCard()`) stores one record
+  per game + player + stat the filters hid — id `sh|game|key|stat` (deterministic, so two devices record the same
+  bet), price when first seen, `evp` (EV), `why`, the card's stake (+ `usd`). `autoSettle()` settles them with the
+  real bets (same ESPN fetch; not counted in the note; not in ESPN's box 36 h after the start = void). Close = a pull
+  in the last 30 min before the start (`applyBoard`; no extra credits — none are pulled just for these). Rides in the
+  ☁ Sync file as `shadow` (`mergeShadow`: more known wins, then the earlier record — so devices converge instead of
+  overwriting each other on every sync). In the export. Never in the bankroll or the bet log.
+- Log → ⚙ More → 🕶 Background bets: per filter — bets, record, flat ROI (1u), CLV, P/L at the card's stakes, verdict
+  (<30 settled "too early", ≤−3% "still losing", ≥+3% on 100+ settled "📈 winning now"). A filter that's ON and "winning
+  now" puts a note above the log (`#shadowAlert`). When the user asks how the filters are doing: read `nhlp_shadow` from
+  their Chrome (read-only) and re-run the breakdown on it; re-test before suggesting a filter come off.
+
 ## ⚡ Automatic closing prices (2026-10-20 — 16 NHL bets went 5-11 with NO Close on any, so the log had no CLV)
 - The NFL app's rule, ported (NBA has the same code). `autoCloses()` runs 8 s after opened() (after the first sync), every
   2 min, and on `visibilitychange` (phones pause timers): `autoLiveCloses()` then `autoHistCloses()`.
