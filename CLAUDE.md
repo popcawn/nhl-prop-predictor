@@ -47,6 +47,7 @@ bet-log history). See README.md for the model and its backtest.
   BetRivers (not in the user's state). State falls back to the NFL app's `nfltd_oddscfg.state` (same site).
 
 ## App structure
+- ALL FIVE BOOKS BY DEFAULT (2026-10-24, user: "is it intentional to have betmgm turned off for nba" — no): the book list is saved per device and a new device started with FanDuel + DraftKings only (the user's desktop had all five; the phone likely not). Default is now FD, DK, BetMGM, Caesars, Fanatics; a device that saved fewer gets the rest added ONCE (`nhlp_oddscfg.booksV2`, kept by the settings save); unticking after that sticks. Don't drop books from the default: the real-price test found the NBA edge in shopping all five.
 - localStorage prefix `nhlp_` (bets, bank, boards 3 days, status per day incl. `G|game|team` goalie picks, oddscfg,
   oddskey → falls back to `nfltd_oddskey` / `nbap_oddskey`, mtab).
 - Phone tab bar: sections carry `data-m` card | games | priced | bets in the HTML.

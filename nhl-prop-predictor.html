@@ -534,7 +534,11 @@ function saveBets(){ stampChanges(); lsW('nhlp_bets', bets); renderAll(); syncSo
 const ODDS_API='https://api.the-odds-api.com/v4/sports/icehockey_nhl';
 const OA={player_shots_on_goal:'sog', player_goal_scorer_anytime:'goal', player_goals:'goal', player_points:'pts'};
 const DEFAULT_MK={player_shots_on_goal:true, player_goal_scorer_anytime:true, player_points:true, player_goals:false};
-let CFG=Object.assign({books:['fanduel','draftkings'], mk:null, reserve:300, state:''}, lsJ('nhlp_oddscfg', {}));
+// all five of your books by default (user, 2026-10-24: "is it intentional to have betmgm turned off" — no: the list is
+// saved per device and a new device started with FanDuel + DraftKings only, while the real-price test found the edge in
+// shopping all five). A device that saved fewer gets the rest added once (booksV2); unticking one after that sticks
+let CFG=Object.assign({books:['fanduel','draftkings','betmgm','williamhill_us','fanatics'], mk:null, reserve:300, state:''}, lsJ('nhlp_oddscfg', {}));
+if(!CFG.booksV2){ CFG.books=[...new Set((CFG.books||[]).concat(['fanduel','draftkings','betmgm','williamhill_us','fanatics']))]; CFG.booksV2=1; lsW('nhlp_oddscfg', CFG); }
 const BOOK_CHOICES=['fanduel','draftkings','betmgm','williamhill_us','fanatics'];
 const BOOK_NAMES={fanduel:'FanDuel', draftkings:'DraftKings', betmgm:'BetMGM', williamhill_us:'Caesars', betrivers:'BetRivers', fanatics:'Fanatics'}, BOOK_TAGS={fanduel:'FD', draftkings:'DK', betmgm:'MGM', williamhill_us:'CZR', betrivers:'BR', fanatics:'FAN'};
 const bookName=b=>BOOK_NAMES[b]||b||'', bookTag=b=>BOOK_TAGS[b]||String(b||'').slice(0,3).toUpperCase();
@@ -1014,7 +1018,7 @@ if(!CFG.state){ try{ const n=JSON.parse(localStorage.getItem('nfltd_oddscfg')||'
 const bkBoxes=[...document.querySelectorAll('.bkchk')], mkBoxes=[...document.querySelectorAll('.mkchk')];
 bkBoxes.forEach(c=>{ c.checked=myBooks().includes(c.value); }); mkBoxes.forEach(c=>{ c.checked=mkOn(c.value); }); $('oddsReserve').value=CFG.reserve; $('oddsState').value=CFG.state||'';
 const showCost=()=>{ const n=pickedMarkets().length; $('oddsCost').textContent=n+' credit'+(n===1?'':'s'); };
-const saveCfg=()=>{ CFG={books:bkBoxes.filter(c=>c.checked).map(c=>c.value), mk:Object.fromEntries(mkBoxes.map(c=>[c.value,c.checked])), reserve:Math.max(0,+$('oddsReserve').value||0), state:$('oddsState').value||''}; lsW('nhlp_oddscfg', CFG); showCost(); renderAll(); };
+const saveCfg=()=>{ CFG={books:bkBoxes.filter(c=>c.checked).map(c=>c.value), mk:Object.fromEntries(mkBoxes.map(c=>[c.value,c.checked])), reserve:Math.max(0,+$('oddsReserve').value||0), state:$('oddsState').value||'', booksV2:1}; lsW('nhlp_oddscfg', CFG); showCost(); renderAll(); };
 bkBoxes.concat(mkBoxes, [$('oddsReserve'), $('oddsState')]).forEach(el=>el.addEventListener('change', saveCfg)); showCost();
 document.addEventListener('click', e=>{ const b=e.target.closest&&e.target.closest('.statepick'); if(!b) return; $('oddsCfg').open=true; showTab('card'); $('oddsCfg').scrollIntoView({behavior:'smooth'}); setTimeout(()=>$('oddsState').focus(), 400); });
 $('oddsKeyMsg').textContent=oddsKey()?'saved ✓':'';
