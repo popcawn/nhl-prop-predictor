@@ -81,7 +81,7 @@ bet-log history). See README.md for the model and its backtest.
 - LIVE (AUTO.close, on by default): open bets whose start (SLATE tip, else `b.ko`) is ≤15 min away → `pullGame(g, only the
   bets' markets)` → `applyBoard(g, board, true)` (b.cur) → `applyClose()` = `closeView()` (the bet's book at the bet's
   line; a moved line is translated → `closeEst`). 1 credit per market per game. Errors other than key/credits retry next check.
-- HISTORY (AUTO.hist, OPT-IN, off by default): bets with no Close whose game started <14 days ago (pushes/voids skipped) →
+- HISTORY (AUTO.hist, ON by default since 2026-10-24 — user: "automatically add closing prices for nba and nhl same way as nfl"; it was opt-in and per device, so the phone never filled closes for games it wasn't open for. A device that saved hist:false is switched on ONCE (`nhlp_auto.v2`); unticking after that sticks. ~11 credits per market per game, only for bets the live close missed; 69K credits left that day): bets with no Close whose game started <14 days ago (pushes/voids skipped) →
   `histBoard()`: HIST_API `/events?date=start−5min` (1 credit) + `/events/{id}/odds?date=…&bookmakers=myBooks()` (10 per
   market). Free plan → `nhlp_histoff` pauses 3 days; offline / 401 / 429 → 30-min pause (memory); other errors mark the game 'fail'.
 - Each game|start|market is tried ONCE, live or history (`nhlp_closed`, pruned after 21 days). Both stop at CFG.reserve

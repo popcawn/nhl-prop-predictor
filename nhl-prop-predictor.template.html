@@ -918,7 +918,10 @@ async function pullCloses(){
 // — your book 5 min before the start, 10 credits per market per game + 1 to find the event. Each game + market is tried
 // once (nhlp_closed); both stop at CFG.reserve; a page built in the background spends nothing (apiGet awaits opened()).
 const HIST_API='https://api.the-odds-api.com/v4/historical/sports/icehockey_nhl', CLOSE_WIN=15*60e3, HIST_DAYS=14;
-let AUTO=Object.assign({close:true, hist:false}, lsJ('nhlp_auto', {}));   // hist costs 10 credits per bet type per game — off until you tick it
+// both on by default (user, 2026-10-24: "automatically add closing prices for nba and nhl same way as nfl"): history
+// closes were opt-in and the setting is per device, so a phone that never ticked it got no Close for games it wasn't open
+// for. A device that saved hist:false before then is switched on once (v2); unticking it after that sticks
+let AUTO=(a=>{ if(!a.v2){ a.hist=true; a.v2=1; lsW('nhlp_auto', a); } return a; })(Object.assign({close:true, hist:true}, lsJ('nhlp_auto', {})));
 let CLOSED=(c=>{ const old=Date.now()-21*864e5; for(const k of Object.keys(c)) if(!(c[k].t>old)) delete c[k]; return c; })(lsJ('nhlp_closed', {}));
 let closeBusy=false, histPause=0;
 const startOf=b=>{ const g=gameOf(b.game); return Date.parse((g&&g.tip)||b.ko||'')||0; };
