@@ -571,14 +571,21 @@ const FD_SLIP='https://sportsbook.fanduel.com/addToBetslip', BOOK_HOME={fanatics
 function bookLink(book, tks, usd){ if(!tks.length) return null; const st=String(CFG.state||'').toLowerCase();
   if(book==='fanduel'){ if(tks.some(x=>!x.m||!x.s)) return null; return tks.length===1?`${FD_SLIP}?marketId=${encodeURIComponent(tks[0].m)}&selectionId=${encodeURIComponent(tks[0].s)}`:FD_SLIP+'?'+tks.map((x,i)=>`marketId[${i}]=${encodeURIComponent(x.m)}&selectionId[${i}]=${encodeURIComponent(x.s)}`).join('&'); }
   if(book==='draftkings'){ if(tks.some(x=>!x.s)) return null; return 'https://sportsbook.draftkings.com/?outcomes='+tks.map(x=>encodeURIComponent(x.s)).join('+'); }
-  if(book==='betmgm'){ if(!st||tks.some(x=>!x.g)) return null; return `https://sports.${st}.betmgm.com/en/sports?options=${tks.map(x=>x.g).join(',')}&type=Single${usd&&tks.length===1?'&stake='+usd:''}`; }
+  if(book==='betmgm'){ if(!st||tks.some(x=>!x.g)) return null; return `https://sports.${st}.betmgm.com/en/sports?options=${tks.map(x=>x.g).join(',')}&type=Single${usd?'&stake='+usd:''}`; }
   if(book==='williamhill_us'){ if(!st||tks.some(x=>!x.s)) return null; return `https://sportsbook.caesars.com/us/${st}/bet/betslip?selectionIds=${tks.map(x=>encodeURIComponent(x.s)).join(',')}`; }
   return null; }
 // buttons that open these picks in their book's bet slip (one per book); Fanatics has no slip link — open it and find the bet
-function linkButtons(picks, label){ const by=new Map(), home=new Map(); let miss=0, noState=new Set();
-  for(const c of picks){ const t=c.tk; if(t&&bookLink(t.b,[t])) (by.get(t.b)||by.set(t.b,[]).get(t.b)).push(t); else if(t&&BOOK_HOME[t.b]) (home.get(t.b)||home.set(t.b,[]).get(t.b)).push(c.name); else if(t&&(t.b==='betmgm'||t.b==='williamhill_us')&&!CFG.state) noState.add(bookName(t.b)); else miss++; }
-  const one1=picks.length===1&&picks[0].stake&&unitUsd()!=null?roundUsd(picks[0].stake*unitUsd()):null;
-  let h=''; for(const [b,tks] of by) h+=`<a class="ss" href="${esc(bookLink(b,tks,tks.length===1?one1:null))}" target="_blank" rel="noopener" title="opens ${esc(bookName(b))} with ${tks.length===1?'this bet':'these '+tks.length+' bets'} in the bet slip — check the price there">📲 ${label} ${esc(bookName(b))}${by.size>1?' ('+tks.length+')':''}</a> `;
+// BetMGM's slip link takes ONE stake for every bet in it (the user's iPhone, 2026-10-25: stake=2 filled $2 on both bets; a
+// list like stake=2,3 filled nothing) -> its bets are split into one button per stake amount, each opening with it filled in
+function linkButtons(picks, label){ const by=new Map(), pk=new Map(), home=new Map(); let miss=0, noState=new Set();
+  for(const c of picks){ const t=c.tk; if(t&&bookLink(t.b,[t])){ (by.get(t.b)||by.set(t.b,[]).get(t.b)).push(t); (pk.get(t.b)||pk.set(t.b,[]).get(t.b)).push(c); } else if(t&&BOOK_HOME[t.b]) (home.get(t.b)||home.set(t.b,[]).get(t.b)).push(c.name); else if(t&&(t.b==='betmgm'||t.b==='williamhill_us')&&!CFG.state) noState.add(bookName(t.b)); else miss++; }
+  const k=unitUsd(), usdOf=c=>c.stake&&k!=null?roundUsd(c.stake*k):null;
+  const btn=(b,tks,usd,txt)=>`<a class="ss" href="${esc(bookLink(b,tks,usd))}" target="_blank" rel="noopener" title="opens ${esc(bookName(b))} with ${tks.length===1?'this bet':'these '+tks.length+' bets'} in the bet slip${usd&&b==='betmgm'?' and '+fmtUsd(usd)+(tks.length>1?' on each':'')+' filled in':''} — check the price there">📲 ${txt}</a> `;
+  let h=''; for(const [b,tks] of by){ const P=pk.get(b);
+    if(b==='betmgm'&&tks.length>1&&P.every(usdOf)){ const g=new Map(); for(const c of P){ const u=usdOf(c); (g.get(u)||g.set(u,[]).get(u)).push(c.tk); }
+      for(const [u,T] of [...g].sort((x,y)=>y[0]-x[0])) h+=btn(b, T, u, `Open ${T.length>1?T.length+' ':''}on ${esc(bookName(b))} · ${fmtUsd(u)}${T.length>1?' each':''}`);
+      continue; }
+    h+=btn(b, tks, tks.length===1?usdOf(P[0]):null, `${label} ${esc(bookName(b))}${by.size>1?' ('+tks.length+')':''}`); }
   for(const [b,nm] of home) h+=`<a class="ss" href="${BOOK_HOME[b]}" target="_blank" rel="noopener" title="${esc(bookName(b))} gives no bet-slip link — find the bet there">🔎 ${esc(bookName(b))}: find ${esc(nm.join(', '))}</a> `;
   if(noState.size) h+=`<button class="ss statepick">📍 Pick your state for ${esc([...noState].join(' / '))} links</button> `;
   return h+(miss?`<span class="muted" style="font-size:12px">+ ${miss} not linked</span>`:''); }
