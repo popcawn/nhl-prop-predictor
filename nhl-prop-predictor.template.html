@@ -476,12 +476,6 @@ function fitRoom(L, usdOf){ const B=bankNow(); if(B==null) return {fit:L.slice()
   let left=B-ridingUsd(); const fit=[], out=[];
   for(const c of L.slice().sort((a,b)=>usdOf(b)-usdOf(a))){ const u=usdOf(c); if(u<=left+1e-9){ fit.push(c); left-=u; } else out.push(c); }
   return {fit, out, bank:B, left}; }
-// BetMGM's slip link takes one stake for every bet in it, and one button per stake amount was too many (user, 2026-10-26:
-// "i dont like the individual opens for bet mgm" — half-size NBA stakes made almost every bet its own amount) -> the new
-// BetMGM bets in a batch share one stake, their average: the total is unchanged and one button fills them all
-// The average runs over every BetMGM bet in the batch, logged ones too, so logging some never moves the stake of the rest
-const mgmEven=(L, isNew=c=>!c.held)=>{ const all=L.filter(c=>c.book==='betmgm'); if(all.length<2||!all.some(isNew)) return L; const avg=all.reduce((a,c)=>a+c.stake,0)/all.length;
-  return L.map(c=>c.book==='betmgm'&&isNew(c)?Object.assign({}, c, {stake:avg}):c); };
 const roomNote=R=>R&&R.out.length?`<div class="skipnote" title="the money on open bets across NFL, NBA and NHL never goes above your bankroll — biggest bets first; the rest wait until settled bets free up room">💰 ${fmtUsd(R.bank-R.left)} of your ${fmtUsd(R.bank)} bankroll in play · ${R.out.length} more bet${R.out.length>1?'s':''} wait${R.out.length>1?'':'s'} for room</div>`:'';
 // a stake in dollars exactly as the app shows it (whole $ from $20, half-dollars from $1, cents below) — what you actually bet,
 // so the log's P/L and "To win" match your book
@@ -581,27 +575,20 @@ const abbrByName=name=>S.teamList.find(a=>normName(S.teams[a].name)===normName(n
 const tkOf=(b,o)=>{ const t={b, o:fmtAm(o.price)}; if(b==='fanduel'){ const m=o.link&&/marketId[^=]*=([^&]+)/.exec(o.link); if(m&&o.sid){ t.m=decodeURIComponent(m[1]); t.s=String(o.sid); } } else if(o.sid) t.s=String(o.sid);
   if(b==='betmgm'){ const g=/[?&]options=([^&]+)/.exec(o.link||''); if(g) t.g=decodeURIComponent(g[1]); } return t; };
 const FD_SLIP='https://sportsbook.fanduel.com/addToBetslip', BOOK_HOME={fanatics:'https://sportsbook.fanatics.com/'};
-// BetMGM: the bet slip on their site, and a single bet carries its stake (&stake=) so it opens with the amount filled in (tested on
-// the user's iPhone 2026-10-22). No link opens the BetMGM app there: /sportsapp/ addresses and betmgm.onelink.me app links were
-// tried — the first open Safari, the second the App Store — and the app's private link type isn't published.
-function bookLink(book, tks, usd){ if(!tks.length) return null; const st=String(CFG.state||'').toLowerCase();
+// BetMGM: the bet slip on their site, no stake in the link — you type each bet's stake (user, 2026-10-26: "i dont want the
+// average ... just open all with a click and i fill it in"; a link stake fills ONE amount for every bet in the slip, and BetMGM
+// turned &stake=0.78 into $0.50). No link opens the BetMGM app on the user's iPhone: /sportsapp/ addresses and
+// betmgm.onelink.me app links were tried — the first open Safari, the second the App Store.
+function bookLink(book, tks){ if(!tks.length) return null; const st=String(CFG.state||'').toLowerCase();
   if(book==='fanduel'){ if(tks.some(x=>!x.m||!x.s)) return null; return tks.length===1?`${FD_SLIP}?marketId=${encodeURIComponent(tks[0].m)}&selectionId=${encodeURIComponent(tks[0].s)}`:FD_SLIP+'?'+tks.map((x,i)=>`marketId[${i}]=${encodeURIComponent(x.m)}&selectionId[${i}]=${encodeURIComponent(x.s)}`).join('&'); }
   if(book==='draftkings'){ if(tks.some(x=>!x.s)) return null; return 'https://sportsbook.draftkings.com/?outcomes='+tks.map(x=>encodeURIComponent(x.s)).join('+'); }
-  if(book==='betmgm'){ if(!st||tks.some(x=>!x.g)) return null; return `https://sports.${st}.betmgm.com/en/sports?options=${tks.map(x=>x.g).join(',')}&type=Single${usd?'&stake='+usd:''}`; }
+  if(book==='betmgm'){ if(!st||tks.some(x=>!x.g)) return null; return `https://sports.${st}.betmgm.com/en/sports?options=${tks.map(x=>x.g).join(',')}&type=Single`; }
   if(book==='williamhill_us'){ if(!st||tks.some(x=>!x.s)) return null; return `https://sportsbook.caesars.com/us/${st}/bet/betslip?selectionIds=${tks.map(x=>encodeURIComponent(x.s)).join(',')}`; }
   return null; }
 // buttons that open these picks in their book's bet slip (one per book); Fanatics has no slip link — open it and find the bet
-// BetMGM's slip link takes ONE stake for every bet in it (the user's iPhone, 2026-10-25: stake=2 filled $2 on both bets; a
-// list like stake=2,3 filled nothing) -> its bets are split into one button per stake amount, each opening with it filled in
-function linkButtons(picks, label){ const by=new Map(), pk=new Map(), home=new Map(); let miss=0, noState=new Set();
-  for(const c of picks){ const t=c.tk; if(t&&bookLink(t.b,[t])){ (by.get(t.b)||by.set(t.b,[]).get(t.b)).push(t); (pk.get(t.b)||pk.set(t.b,[]).get(t.b)).push(c); } else if(t&&BOOK_HOME[t.b]) (home.get(t.b)||home.set(t.b,[]).get(t.b)).push(c.name); else if(t&&(t.b==='betmgm'||t.b==='williamhill_us')&&!CFG.state) noState.add(bookName(t.b)); else miss++; }
-  const k=unitUsd(), usdOf=c=>c.stake&&k!=null?roundUsd(c.stake*k):null;
-  const btn=(b,tks,usd,txt)=>`<a class="ss" href="${esc(bookLink(b,tks,usd))}" target="_blank" rel="noopener" title="opens ${esc(bookName(b))} with ${tks.length===1?'this bet':'these '+tks.length+' bets'} in the bet slip${usd&&b==='betmgm'?' and '+fmtUsd(usd)+(tks.length>1?' on each':'')+' filled in':''} — check the price there">📲 ${txt}</a> `;
-  let h=''; for(const [b,tks] of by){ const P=pk.get(b);
-    if(b==='betmgm'&&tks.length>1&&P.every(usdOf)){ const g=new Map(); for(const c of P){ const u=usdOf(c); (g.get(u)||g.set(u,[]).get(u)).push(c.tk); }
-      for(const [u,T] of [...g].sort((x,y)=>y[0]-x[0])) h+=btn(b, T, u, `Open ${T.length>1?T.length+' ':''}on ${esc(bookName(b))} · ${fmtUsd(u)}${T.length>1?' each':''}`);
-      continue; }
-    h+=btn(b, tks, tks.length===1?usdOf(P[0]):null, `${label} ${esc(bookName(b))}${by.size>1?' ('+tks.length+')':''}`); }
+function linkButtons(picks, label){ const by=new Map(), home=new Map(); let miss=0, noState=new Set();
+  for(const c of picks){ const t=c.tk; if(t&&bookLink(t.b,[t])) (by.get(t.b)||by.set(t.b,[]).get(t.b)).push(t); else if(t&&BOOK_HOME[t.b]) (home.get(t.b)||home.set(t.b,[]).get(t.b)).push(c.name); else if(t&&(t.b==='betmgm'||t.b==='williamhill_us')&&!CFG.state) noState.add(bookName(t.b)); else miss++; }
+  let h=''; for(const [b,tks] of by) h+=`<a class="ss" href="${esc(bookLink(b,tks))}" target="_blank" rel="noopener" title="opens ${esc(bookName(b))} with ${tks.length===1?'this bet':'these '+tks.length+' bets'} in the bet slip — check the price there">📲 ${label} ${esc(bookName(b))}${by.size>1?' ('+tks.length+')':''}</a> `;
   for(const [b,nm] of home) h+=`<a class="ss" href="${BOOK_HOME[b]}" target="_blank" rel="noopener" title="${esc(bookName(b))} gives no bet-slip link — find the bet there">🔎 ${esc(bookName(b))}: find ${esc(nm.join(', '))}</a> `;
   if(noState.size) h+=`<button class="ss statepick">📍 Pick your state for ${esc([...noState].join(' / '))} links</button> `;
   return h+(miss?`<span class="muted" style="font-size:12px">+ ${miss} not linked</span>`:''); }
@@ -744,8 +731,8 @@ function buildCard(){
   for(const c of CANDS.filter(c=>c.tier==='take'&&!c.dup).sort((a,b)=>b.kelly-a.kelly)){ const pk=c.game+'|'+c.key+'|'+statOf(c.market);
     if(seen.has(pk)||SKIP[pk]) continue; seen.add(pk);
     picks.push(Object.assign({}, c, {stake:Math.max(0.1, Math.min(BET_CAP, Math.round(0.25*c.kelly*UNITS*10)/10)), held:held.has(pk)})); }
-  const even=mgmEven(picks); ROOM=fitRoom(even.filter(p=>!p.held), p=>roundUsd(p.stake*(unitUsd()||0)));
-  CARD=even.filter(p=>p.held||ROOM.fit.includes(p)); recordShadow();
+  ROOM=fitRoom(picks.filter(p=>!p.held), p=>roundUsd(p.stake*(unitUsd()||0)));
+  CARD=picks.filter(p=>p.held||ROOM.fit.includes(p)); recordShadow();
 }
 function recordShadow(){ const have=new Set(SHADOW.map(r=>r.id)), k=unitUsd(); let n=0;
   for(const c of CANDS.filter(c=>c.tier==='filtered'&&!c.dup).sort((a,b)=>b.kelly-a.kelly)){ const id='sh|'+c.game+'|'+c.key+'|'+c.stat; if(have.has(id)) continue; have.add(id);
