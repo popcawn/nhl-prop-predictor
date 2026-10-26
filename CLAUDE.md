@@ -47,6 +47,7 @@ bet-log history). See README.md for the model and its backtest.
   BetRivers (not in the user's state). State falls back to the NFL app's `nfltd_oddscfg.state` (same site).
 
 ## App structure
+- BANKROLL LIMIT (2026-10-26, user said yes to the plan — "whatever profits the most money"): the $ on open bets across NFL/NBA/NHL (one pot, allBets()) never goes above bankNow(). fitRoom(list, usdOf) takes new bets biggest $ first; the rest wait (card note 💰 "$X of your $Y bankroll in play · N more bets wait for room", Priced verdict 💰 no room; NFL: week list + TD picks, fun picks and parlays exempt). Held/logged bets already count as riding. A season simulation said a HALF-bankroll limit cost growth for almost no safety — keep it at the full bankroll. Logging by hand from Priced / the game card isn't limited.
 - ALL FIVE BOOKS BY DEFAULT (2026-10-24, user: "is it intentional to have betmgm turned off for nba" — no): the book list is saved per device and a new device started with FanDuel + DraftKings only (the user's desktop had all five; the phone likely not). Default is now FD, DK, BetMGM, Caesars, Fanatics; a device that saved fewer gets the rest added ONCE (`nhlp_oddscfg.booksV2`, kept by the settings save); unticking after that sticks. Don't drop books from the default: the real-price test found the NBA edge in shopping all five.
 - localStorage prefix `nhlp_` (bets, bank, boards 3 days, status per day incl. `G|game|team` goalie picks, oddscfg,
   oddskey → falls back to `nfltd_oddskey` / `nbap_oddskey`, mtab).

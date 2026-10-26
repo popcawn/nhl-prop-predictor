@@ -467,6 +467,16 @@ const betUsd=b=>b.usd!=null?+b.usd:(BANK.amt?(+b.stake||0)*BANK.amt/UNITS:null);
 const betPl=b=>{ const d=oddsDec(b.odds)||1, u=BANK.amt?betUsd(b):(+b.stake||0); return b.result==='win'?u*(d-1):b.result==='loss'?-u:b.result==='push'?0:null; };
 function bankNow(){ if(!BANK.amt) return null; let x=BANK.amt; for(const b of allBets()) if(b.st>BANK.at){ const p=betPl(b); if(p!=null) x+=p; } return Math.max(0,x); }   // every sport's settled bets
 const unitUsd=()=>{ const n=bankNow(); return n!=null?n/UNITS:null; };
+// BANKROLL LIMIT (user, 2026-10-26: the plan they said yes to — "whatever profits the most money"): the money on open bets
+// across NFL, NBA and NHL (one pot) never goes above the bankroll. New bets take the room biggest stake first; the rest wait
+// off the card until settled bets free room up. (A simulation of the season said a half-bankroll limit cost growth for
+// almost no safety; the full bankroll stops the overspending — $257 was riding on $133 on Oct 25.)
+const ridingUsd=()=>allBets().filter(b=>b.result==='pending').reduce((a,b)=>a+(betUsd(b)||0),0);
+function fitRoom(L, usdOf){ const B=bankNow(); if(B==null) return {fit:L.slice(), out:[], bank:null, left:null};
+  let left=B-ridingUsd(); const fit=[], out=[];
+  for(const c of L.slice().sort((a,b)=>usdOf(b)-usdOf(a))){ const u=usdOf(c); if(u<=left+1e-9){ fit.push(c); left-=u; } else out.push(c); }
+  return {fit, out, bank:B, left}; }
+const roomNote=R=>R&&R.out.length?`<div class="skipnote" title="the money on open bets across NFL, NBA and NHL never goes above your bankroll — biggest bets first; the rest wait until settled bets free up room">💰 ${fmtUsd(R.bank-R.left)} of your ${fmtUsd(R.bank)} bankroll in play · ${R.out.length} more bet${R.out.length>1?'s':''} wait${R.out.length>1?'':'s'} for room</div>`:'';
 // a stake in dollars exactly as the app shows it (whole $ from $20, half-dollars from $1, cents below) — what you actually bet,
 // so the log's P/L and "To win" match your book
 const roundUsd=x=>{ const a=Math.abs(x); return a>=20?Math.round(a):a>=1?Math.round(a*2)/2:Math.round(a*100)/100; };
@@ -685,7 +695,7 @@ const confBadge=c=>`<span class="conf ${c.score>=0.8?'hi':c.score>=0.6?'md':'lo'
 const FILTERS={fdOnly:'only FanDuel had it', ev10:'10%+ EV'};
 let FILT=Object.assign({fdOnly:true, ev10:true}, lsJ('nhlp_filt', {}));
 const filtWhy=c=>Object.keys(FILTERS).filter(k=>FILT[k]&&(k==='fdOnly'?c.book==='fanduel'&&c.solo:c.ev>=0.10));
-let CANDS=[], CARD=[];
+let CANDS=[], CARD=[], ROOM=null;
 function buildCands(){
   const out=[]; PROJ.clear();
   for(const g of SLATE){ const board=BOARDS[g.game]; const proj=projFor(g); PROJ.set(g.game, proj); if(!board||g.state!=='pre') continue;
@@ -728,7 +738,8 @@ function buildCard(){
   for(const c of CANDS.filter(c=>c.tier==='take'&&!c.dup).sort((a,b)=>b.kelly-a.kelly)){ const pk=c.game+'|'+c.key+'|'+statOf(c.market);
     if(seen.has(pk)||SKIP[pk]) continue; seen.add(pk);
     picks.push(Object.assign({}, c, {stake:Math.max(0.1, Math.min(BET_CAP, Math.round(0.25*c.kelly*UNITS*10)/10)), held:held.has(pk)})); }
-  CARD=picks; recordShadow();
+  ROOM=fitRoom(picks.filter(p=>!p.held), p=>roundUsd(p.stake*(unitUsd()||0)));
+  CARD=picks.filter(p=>p.held||ROOM.fit.includes(p)); recordShadow();
 }
 function recordShadow(){ const have=new Set(SHADOW.map(r=>r.id)), k=unitUsd(); let n=0;
   for(const c of CANDS.filter(c=>c.tier==='filtered'&&!c.dup).sort((a,b)=>b.kelly-a.kelly)){ const id='sh|'+c.game+'|'+c.key+'|'+c.stat; if(have.has(id)) continue; have.add(id);
@@ -772,7 +783,7 @@ function renderGame(){
   body.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(440px,100%),1fr));gap:16px">${col(g.away)}${col(g.home)}</div>`+
     (board?'':`<div class="muted" style="margin-top:8px;font-size:12px">No prices for this game yet — hit ⚡ on its chip (or Pull tonight).</div>`);
 }
-const verdictOf=c=>{ if(SKIP[skipKey(c)]) return '<span class="muted" title="you skipped it on the Bets tab — ↩ Bring back is under the bets">skipped</span>'; const pick=CARD.find(p=>p.game===c.game&&p.key===c.key&&p.market===c.market); return pick?`<span class="vb vb-take">★ BET ${stakeTxt(pick.stake)}</span>`:c.tier==='take'?'<span class="vb vb-edge" title="an edge, but this player\'s stat is already on the card or in your log (one bet per player per stat)">edge</span>':c.tier==='flag'?'<span class="vb vb-flag" title="an edge this big usually means news the price hasn\'t caught up with — check the lineup and the goalie">⚠ check</span>':c.tier==='filtered'?`<span class="muted" title="${esc('hidden by your filter ('+c.why.map(k=>FILTERS[k]).join(', ')+') — tracked in the background: Log → ⚙ More')}">🕶 filtered</span>`:c.tier==='model'?'<span class="muted">model only</span>':c.tier==='dart'?'<span class="muted" title="under a 6% chance — too rare to price reliably, never bet">🎲 long shot</span>':c.tier==='nobet'?'<span class="muted" title="on last season\'s real prices, betting the anytime-goal prices that looked best lost 38% (183 bets): a book out of line on a scorer usually knows something">not bet (tested)</span>':'<span class="muted">pass</span>'; };
+const verdictOf=c=>{ if(SKIP[skipKey(c)]) return '<span class="muted" title="you skipped it on the Bets tab — ↩ Bring back is under the bets">skipped</span>'; const pick=CARD.find(p=>p.game===c.game&&p.key===c.key&&p.market===c.market); return pick?`<span class="vb vb-take">★ BET ${stakeTxt(pick.stake)}</span>`:ROOM&&ROOM.out.some(p=>p.game===c.game&&p.key===c.key&&p.market===c.market)?'<span class="vb vb-edge" title="a bet, but your bankroll is fully in play — it moves onto the card when settled bets free up room">💰 no room</span>':c.tier==='take'?'<span class="vb vb-edge" title="an edge, but this player\'s stat is already on the card or in your log (one bet per player per stat)">edge</span>':c.tier==='flag'?'<span class="vb vb-flag" title="an edge this big usually means news the price hasn\'t caught up with — check the lineup and the goalie">⚠ check</span>':c.tier==='filtered'?`<span class="muted" title="${esc('hidden by your filter ('+c.why.map(k=>FILTERS[k]).join(', ')+') — tracked in the background: Log → ⚙ More')}">🕶 filtered</span>`:c.tier==='model'?'<span class="muted">model only</span>':c.tier==='dart'?'<span class="muted" title="under a 6% chance — too rare to price reliably, never bet">🎲 long shot</span>':c.tier==='nobet'?'<span class="muted" title="on last season\'s real prices, betting the anytime-goal prices that looked best lost 38% (183 bets): a book out of line on a scorer usually knows something">not bet (tested)</span>':'<span class="muted">pass</span>'; };
 let BOARDROWS=[];
 function renderBoard(){
   const all=CANDS.filter(c=>!c.dup), showAll=$('boardAll').checked, ord=c=>CARD.some(p=>p.game===c.game&&p.key===c.key&&p.market===c.market)?0:c.tier==='take'?1:c.tier==='flag'?2:3;
@@ -814,6 +825,7 @@ function byBook(L){ const m=new Map(); for(const c of L){ const b=c.book||'fandu
   const o=b=>{ const i=BOOK_ORDER.indexOf(b); return i<0?99:i; }; return [...m].sort((x,y)=>o(x[0])-o(y[0])); }
 function renderCard(){
   const body=$('cardBody'), any=Object.keys(BOARDS).some(g=>gameOf(g));
+  if(!CARD.length&&ROOM&&ROOM.out.length){ body.innerHTML=cardStat('done','💰 BANKROLL IN PLAY', `${ROOM.out.length} bet${ROOM.out.length>1?'s':''} wait for room`)+roomNote(ROOM)+skippedNote(); return; }
   if(!CARD.length){ const open=bets.filter(b=>b.result==='pending'&&gameOf(b.game)).length;
     body.innerHTML=any?(open?cardStat('done','✅ NO NEW BETS',`you have ${open} open bet${open>1?'s':''} tonight — nothing new clears the bar`):cardStat('none','NO BETS TONIGHT','nothing clears the bar'))+'<div class="muted" style="font-size:14px">Nothing at your books beats what the other books say it\'s worth by enough — that\'s the normal case.</div>'
       :'<div class="muted" style="font-size:14px">Pull tonight\'s prices and the best few bets across every game show up here, with stakes and links.</div>'; body.innerHTML+=skippedNote(); return; }
@@ -824,7 +836,7 @@ function renderCard(){
     `<div class="bacts"><button class="ss" id="cardLog">📓 Log ${un.length===CARD.length?'these '+un.length:'the '+un.length+' new'}</button></div>`:'')+
     byBook(un).map(([b,L])=>`<div class="bgame">${esc(bookName(b))} · ${L.length} bet${L.length>1?'s':''} · ${stakeTxt(L.reduce((a,c)=>a+c.stake,0))}${L.length>1?`<span class="bgo">${linkButtons(L, `Open all ${L.length} on`)}</span>`:''}</div>`+
     `<div class="bcards">`+L.map(c=>betCard({nw:true, tc:teamColor(c.abbr), name:(CARD.indexOf(c)?'':'★ ')+c.name, mkt:mktLabel(c.market), sub:`${esc(fmtGame(c.game))}${tipTime(c.game)?' · '+tipTime(c.game):''}`, odds:c.odds, book:c.book, stake:c.stake,
-      conf:confBadge(c.conf), mp:c.mp, bimp:c.bimp, ev:c.ev, link:linkButtons([c], 'Open on'), extra:skipBtn(c)+floorTxt(c)})).join('')+'</div>').join('')+skippedNote();
+      conf:confBadge(c.conf), mp:c.mp, bimp:c.bimp, ev:c.ev, link:linkButtons([c], 'Open on'), extra:skipBtn(c)+floorTxt(c)})).join('')+'</div>').join('')+roomNote(ROOM)+skippedNote();
   const cl=$('cardLog'); if(cl) cl.onclick=()=>{ let n=0; for(const c of CARD) if(!c.held&&logBet(c, c.stake)) n++; if(n) saveBets(); };
 }
 // ---- bet log: one summary line, then days -> bets
