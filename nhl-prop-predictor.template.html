@@ -288,6 +288,7 @@
             <div><b>Closing prices</b> <span class="muted">— Close fills itself, so the bet log's CLV works</span><br>
               <label title="while the app is open in the 15 minutes before puck drop, Close is filled from your book's live price — 1 credit per bet type per game"><input type="checkbox" id="autoCloseChk"> ⚡ closing lines before puck drop <span class="muted">(1 credit per bet type, app open)</span></label><br>
               <label title="for games you didn't have the app open for: after puck drop, Close comes from The Odds API's price history (your book 5 min before the start) — 10 credits per bet type per game"><input type="checkbox" id="autoHistChk"> + after puck drop from history <span class="muted">(10 credits per bet type per game)</span></label> <span id="histCost" class="muted"></span></div>
+            <div><label title="no bets on the card: every bet the app would make is logged to the background log and settled there — no money on them"><input type="checkbox" id="paperChk"> <b>🕶 Background only</b> <span class="muted">— track every bet the app would make, bet none (NHL is paused until the Nov 8 review)</span></label></div>
             <div><b>Filters</b> <span class="muted">— bets that lost on last season's real prices. They're hidden but still priced, and tracked in the background (Log → ⚙ More)</span><br>
               <label title="the edge is at FanDuel and none of your other books has that price: -58% on 16 bets last season, down in both halves"><input type="checkbox" class="filtchk" value="fdOnly"> Skip edges only FanDuel has <span class="muted">(-58% on 16 bets)</span></label> <label title="an edge of 10% or more is usually news (a scratch, a goalie change) the price already knows: 0 for 3 last season"><input type="checkbox" class="filtchk" value="ev10"> Skip 10%+ EV <span class="muted">(0 for 3)</span></label></div>
             <div>Never pull below <input id="oddsReserve" type="number" min="0" step="10" style="width:70px;font-size:12px"> credits <span class="muted">(kept for your other apps on this key)</span></div>
@@ -342,7 +343,7 @@
         <div id="betBody"></div>
         <details style="margin-top:12px"><summary style="cursor:pointer;font-size:13px;font-weight:700">⚙ More <span class="muted" style="font-weight:400">— background bets · how it was tested · backup</span></summary>
           <div class="sub" style="font-size:13px"><b>🏆 By sportsbook</b> <span class="muted">— every sport's settled bets, most profitable first</span><div id="bookStats"></div></div>
-          <div class="sub" style="font-size:13px"><b>🕶 Background bets</b> <span class="muted">— what your filters hid, priced and settled like real bets but never shown on the card</span><div id="shadowStats"></div></div>
+          <div class="sub" style="font-size:13px"><b>🕶 Background bets</b> <span class="muted">— what background mode and your filters kept off the card, priced and settled like real bets</span><div id="shadowStats"></div></div>
           <div class="sub" id="testNote" style="font-size:13px;line-height:1.55"></div>
           <div class="sub"><b>Backup</b> <button class="ss" id="betExport">⬇ Export</button> <button class="ss" id="betImport">⬆ Import</button> <input type="file" id="betImportFile" accept=".json,application/json" style="display:none"> <button class="ss" id="betClear">Clear log</button></div>
           <div class="sub muted" style="font-size:12px;line-height:1.55"><b>How to read it.</b> <b>CLV</b> = how much better your price was than the closing price at the same book; beat the close over many bets and profit follows. <b>Close</b> fills itself: your book's price in the 15 minutes before puck drop while the app is open, or — if you tick it under odds settings — its price 5 minutes before the start from price history. A grey <b>≈</b> CLV is a live read from your last pull. <b>▼ / ▲</b> = the book moved the line since you bet. <b>🤖</b> = settled from ESPN's box score (a scratched player is a void). <b>✋</b> = settle that one yourself.</div>
@@ -689,6 +690,10 @@ const FILTERS={fdOnly:'only FanDuel had it', ev10:'10%+ EV'};
 let FILT=Object.assign({fdOnly:true, ev10:true}, lsJ('nhlp_filt', {}));
 const filtWhy=c=>Object.keys(FILTERS).filter(k=>FILT[k]&&(k==='fdOnly'?c.book==='fanduel'&&c.solo:c.ev>=0.10));
 let CANDS=[], CARD=[], ROOM=null;
+// 🕶 BACKGROUND ONLY (user, 2026-10-27: "should we go all in on nfl and backgroudn nba and nhl" — yes: NHL was paused for
+// real money until the ~Nov 8 review): the card bets nothing; every bet it would have shown (not already in your log) goes to
+// the background log as 'paper' and settles there. On by default; the switch is under odds settings
+let PAPER=lsJ('nhlp_paper', true)!==false, PAPERCARD=[];
 function buildCands(){
   const out=[]; PROJ.clear();
   for(const g of SLATE){ const board=BOARDS[g.game]; const proj=projFor(g); PROJ.set(g.game, proj); if(!board||g.state!=='pre') continue;
@@ -731,13 +736,16 @@ function buildCard(){
   for(const c of CANDS.filter(c=>c.tier==='take'&&!c.dup).sort((a,b)=>b.kelly-a.kelly)){ const pk=c.game+'|'+c.key+'|'+statOf(c.market);
     if(seen.has(pk)||SKIP[pk]) continue; seen.add(pk);
     picks.push(Object.assign({}, c, {stake:Math.max(0.1, Math.min(BET_CAP, Math.round(0.25*c.kelly*UNITS*10)/10)), held:held.has(pk)})); }
+  if(PAPER){ ROOM=null; CARD=[]; PAPERCARD=picks.filter(p=>!p.held); recordShadow(PAPERCARD); return; }
+  PAPERCARD=[];
   ROOM=fitRoom(picks.filter(p=>!p.held), p=>roundUsd(p.stake*(unitUsd()||0)));
   CARD=picks.filter(p=>p.held||ROOM.fit.includes(p)); recordShadow();
 }
-function recordShadow(){ const have=new Set(SHADOW.map(r=>r.id)), k=unitUsd(); let n=0;
-  for(const c of CANDS.filter(c=>c.tier==='filtered'&&!c.dup).sort((a,b)=>b.kelly-a.kelly)){ const id='sh|'+c.game+'|'+c.key+'|'+c.stat; if(have.has(id)) continue; have.add(id);
-    const stake=Math.max(0.1, Math.min(BET_CAP, Math.round(0.25*c.kelly*UNITS*10)/10));
-    SHADOW.push({id, ts:new Date().toISOString(), ko:c.tip, ev:c.evId, game:c.game, key:c.key, player:c.name, market:c.market, odds:c.odds, book:c.book, mp:+c.mp.toFixed(4), evp:+c.ev.toFixed(4), why:c.why, stake, ...(k!=null?{usd:roundUsd(stake*k)}:{}), result:'pending'}); n++; }
+function recordShadow(paper){ const have=new Set(SHADOW.map(r=>r.id)), k=unitUsd(); let n=0;
+  const add=(c, why, stake)=>{ const id='sh|'+c.game+'|'+c.key+'|'+c.stat; if(have.has(id)) return; have.add(id);
+    SHADOW.push({id, ts:new Date().toISOString(), ko:c.tip, ev:c.evId, game:c.game, key:c.key, player:c.name, market:c.market, odds:c.odds, book:c.book, mp:+c.mp.toFixed(4), evp:+c.ev.toFixed(4), why, stake, ...(k!=null?{usd:roundUsd(stake*k)}:{}), result:'pending'}); n++; };
+  for(const c of CANDS.filter(c=>c.tier==='filtered'&&!c.dup).sort((a,b)=>b.kelly-a.kelly)) add(c, c.why, Math.max(0.1, Math.min(BET_CAP, Math.round(0.25*c.kelly*UNITS*10)/10)));
+  for(const c of (paper||[])) add(c, ['paper'], c.stake);
   if(n){ if(SHADOW.length>5000) SHADOW=SHADOW.slice(-5000); saveShadow(); syncSoon(); } }
 // one bet per player per stat: a second bet on the same player's stat (any line, either side) is refused
 function logBet(c, stake){ if(bets.some(b=>b.result==='pending'&&b.game===c.game&&b.key===c.key&&statOf(b.market)===statOf(c.market))) return false; const k=unitUsd();
@@ -776,7 +784,7 @@ function renderGame(){
   body.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(440px,100%),1fr));gap:16px">${col(g.away)}${col(g.home)}</div>`+
     (board?'':`<div class="muted" style="margin-top:8px;font-size:12px">No prices for this game yet — hit ⚡ on its chip (or Pull tonight).</div>`);
 }
-const verdictOf=c=>{ if(SKIP[skipKey(c)]) return '<span class="muted" title="you skipped it on the Bets tab — ↩ Bring back is under the bets">skipped</span>'; const pick=CARD.find(p=>p.game===c.game&&p.key===c.key&&p.market===c.market); return pick?`<span class="vb vb-take">★ BET ${stakeTxt(pick.stake)}</span>`:ROOM&&ROOM.out.some(p=>p.game===c.game&&p.key===c.key&&p.market===c.market)?'<span class="vb vb-edge" title="a bet, but your bankroll is fully in play — it moves onto the card when settled bets free up room">💰 no room</span>':c.tier==='take'?'<span class="vb vb-edge" title="an edge, but this player\'s stat is already on the card or in your log (one bet per player per stat)">edge</span>':c.tier==='flag'?'<span class="vb vb-flag" title="an edge this big usually means news the price hasn\'t caught up with — check the lineup and the goalie">⚠ check</span>':c.tier==='filtered'?`<span class="muted" title="${esc('hidden by your filter ('+c.why.map(k=>FILTERS[k]).join(', ')+') — tracked in the background: Log → ⚙ More')}">🕶 filtered</span>`:c.tier==='model'?'<span class="muted">model only</span>':c.tier==='dart'?'<span class="muted" title="under a 6% chance — too rare to price reliably, never bet">🎲 long shot</span>':c.tier==='nobet'?'<span class="muted" title="on last season\'s real prices, betting the anytime-goal prices that looked best lost 38% (183 bets): a book out of line on a scorer usually knows something">not bet (tested)</span>':'<span class="muted">pass</span>'; };
+const verdictOf=c=>{ if(SKIP[skipKey(c)]) return '<span class="muted" title="you skipped it on the Bets tab — ↩ Bring back is under the bets">skipped</span>'; if(PAPER&&c.tier==='take') return '<span class="muted" title="background only — tracked in the background log, no money on it">🕶 tracked</span>'; const pick=CARD.find(p=>p.game===c.game&&p.key===c.key&&p.market===c.market); return pick?`<span class="vb vb-take">★ BET ${stakeTxt(pick.stake)}</span>`:ROOM&&ROOM.out.some(p=>p.game===c.game&&p.key===c.key&&p.market===c.market)?'<span class="vb vb-edge" title="a bet, but your bankroll is fully in play — it moves onto the card when settled bets free up room">💰 no room</span>':c.tier==='take'?'<span class="vb vb-edge" title="an edge, but this player\'s stat is already on the card or in your log (one bet per player per stat)">edge</span>':c.tier==='flag'?'<span class="vb vb-flag" title="an edge this big usually means news the price hasn\'t caught up with — check the lineup and the goalie">⚠ check</span>':c.tier==='filtered'?`<span class="muted" title="${esc('hidden by your filter ('+c.why.map(k=>FILTERS[k]).join(', ')+') — tracked in the background: Log → ⚙ More')}">🕶 filtered</span>`:c.tier==='model'?'<span class="muted">model only</span>':c.tier==='dart'?'<span class="muted" title="under a 6% chance — too rare to price reliably, never bet">🎲 long shot</span>':c.tier==='nobet'?'<span class="muted" title="on last season\'s real prices, betting the anytime-goal prices that looked best lost 38% (183 bets): a book out of line on a scorer usually knows something">not bet (tested)</span>':'<span class="muted">pass</span>'; };
 let BOARDROWS=[];
 function renderBoard(){
   const all=CANDS.filter(c=>!c.dup), showAll=$('boardAll').checked, ord=c=>CARD.some(p=>p.game===c.game&&p.key===c.key&&p.market===c.market)?0:c.tier==='take'?1:c.tier==='flag'?2:3;
@@ -818,6 +826,9 @@ function byBook(L){ const m=new Map(); for(const c of L){ const b=c.book||'fandu
   const o=b=>{ const i=BOOK_ORDER.indexOf(b); return i<0?99:i; }; return [...m].sort((x,y)=>o(x[0])-o(y[0])); }
 function renderCard(){
   const body=$('cardBody'), any=Object.keys(BOARDS).some(g=>gameOf(g));
+  if(PAPER){ const n=PAPERCARD.length, a=shadowAgg(SHADOW.filter(r=>(r.why||[]).includes('paper'))), done=a.w+a.l, pc=v=>(v>=0?'+':'')+(v*100).toFixed(1)+'%';
+    body.innerHTML=cardStat('done','🕶 BACKGROUND ONLY', any?`${n} would-be bet${n===1?'':'s'} tracked tonight — nothing to bet`:'pull tonight\'s prices to track the would-be bets')+
+      `<div class="muted" style="font-size:14px">NHL is paused for real money until the Nov 8 review. The app logs every bet it would have made and settles them itself — no money on them.${done?` So far <b>${a.w}-${a.l}${a.p?'-'+a.p:''}</b> · ROI <b class="${a.roi>0?'ev-pos':a.roi<0?'ev-neg':''}">${pc(a.roi)}</b>${a.clv!=null?` · CLV ${pc(a.clv)}`:''}.`:''} Details: Log → ⚙ More → 🕶 Background bets.</div>`; return; }
   if(!CARD.length&&ROOM&&ROOM.out.length){ body.innerHTML=cardStat('done','💰 BANKROLL IN PLAY', `${ROOM.out.length} bet${ROOM.out.length>1?'s':''} wait${ROOM.out.length>1?'':'s'} for room`)+roomNote(ROOM)+skippedNote(); return; }
   if(!CARD.length){ const open=bets.filter(b=>b.result==='pending'&&gameOf(b.game)).length;
     body.innerHTML=any?(open?cardStat('done','✅ NO NEW BETS',`you have ${open} open bet${open>1?'s':''} tonight — nothing new clears the bar`):cardStat('none','NO BETS TONIGHT','nothing clears the bar'))+'<div class="muted" style="font-size:14px">Nothing at your books beats what the other books say it\'s worth by enough — that\'s the normal case.</div>'
@@ -886,16 +897,17 @@ const shadowAgg=L=>{ let w=0,l=0,p=0,open=0,net=0,usd=0,hasUsd=false,cs=0,cn=0; 
     if(r.result==='win'){ w++; net+=d-1; usd+=(r.usd||0)*(d-1); } else if(r.result==='loss'){ l++; net-=1; usd-=r.usd||0; } else if(r.result==='push') p++; else open++;
     if(c&&oddsDec(r.odds)){ cs+=d/c-1; cn++; } }
   return {n:L.length,w,l,p,open,net,roi:w+l?net/(w+l):null,usd:hasUsd&&w+l?usd:null,clv:cn?cs/cn:null,cn}; };
-const shadowTrend=a=>{ const n=a.w+a.l; return n<30?{t:`too early (${n} settled)`, c:'muted'}:a.roi>=0.03&&n>=100?{t:'📈 winning now — worth a re-test', c:'ev-pos', hot:true}:a.roi<=-0.03?{t:'✓ still losing — the filter is saving you money', c:''}:{t:'about break-even', c:'muted'}; };
+const shadowTrend=(a,k)=>{ const n=a.w+a.l; return n<30?{t:`too early (${n} settled)`, c:'muted'}:a.roi>=0.03&&n>=100?{t:'📈 winning now — worth a re-test', c:'ev-pos', hot:true}:a.roi<=-0.03?{t:k==='paper'?'✓ still losing — pausing it saves you money':'✓ still losing — the filter is saving you money', c:''}:{t:'about break-even', c:'muted'}; };
+const WHY=Object.assign({paper:'Background mode — every would-be bet'}, FILTERS), whyOn=k=>k==='paper'?PAPER:!!FILT[k];
 function renderShadow(){ const el=$('shadowStats'), al=$('shadowAlert'); if(!el) return; const pc=v=>v==null?'—':(v>=0?'+':'')+(v*100).toFixed(1)+'%';
-  const rows=Object.keys(FILTERS).map(k=>({k, a:shadowAgg(SHADOW.filter(r=>(r.why||[]).includes(k)))})).filter(x=>x.a.n);
+  const rows=Object.keys(WHY).map(k=>({k, a:shadowAgg(SHADOW.filter(r=>(r.why||[]).includes(k)))})).filter(x=>x.a.n);
   if(!rows.length){ el.innerHTML='<span class="muted">Nothing hidden yet — bets your filters hide show up here after a pull.</span>'; if(al) al.innerHTML=''; return; }
   const usdTxt=v=>v==null?'—':`<span class="${v>0?'ev-pos':v<0?'clv-bad':''}">${v>=0?'+':'-'}${fmtUsd(Math.abs(v))}</span>`;
-  el.innerHTML=`<table class="bkstat"><thead><tr><th class="l">Filter</th><th>Bets</th><th>Record</th><th title="1 unit on each">ROI</th><th title="price taken vs the price in the last 30 min before the start">CLV</th><th title="won / lost at the stakes the card would have shown">At card stakes</th><th class="l">So far</th></tr></thead><tbody>`+
-    rows.map(({k,a})=>{ const t=shadowTrend(a); return `<tr><td class="l"><b>${esc(FILTERS[k])}</b>${FILT[k]?'':' <span class="muted">(off)</span>'}</td><td>${a.n}${a.open?` <span class="muted">· ${a.open} open</span>`:''}</td><td>${a.w}-${a.l}${a.p?'-'+a.p:''}</td><td class="${a.roi>0?'ev-pos':a.roi<0?'clv-bad':''}">${pc(a.roi)}</td><td class="${a.clv>0?'ev-pos':a.clv<0?'clv-bad':''}">${pc(a.clv)}${a.cn?` <span class="muted">(${a.cn})</span>`:''}</td><td>${usdTxt(a.usd)}</td><td class="l ${t.c}">${t.t}</td></tr>`; }).join('')+
-    `</tbody></table><div class="muted" style="font-size:12px;margin-top:4px">These are never bet and never touch your bankroll. Want a type back on the card? Untick its filter under odds settings.</div>`;
-  const hot=rows.filter(x=>shadowTrend(x.a).hot&&FILT[x.k]);
-  if(al) al.innerHTML=hot.length?`<div style="margin:0 0 10px;padding:8px 10px;border-radius:8px;border:1px solid var(--good);font-size:13px">📈 ${hot.map(({k,a})=>`Bets the <b>${esc(FILTERS[k])}</b> filter hid are up <b>${pc(a.roi)}</b> over ${a.w+a.l} settled`).join(' · ')} — worth a re-test before turning it off (details: ⚙ More).</div>`:''; }
+  el.innerHTML=`<table class="bkstat"><thead><tr><th class="l">Kept off by</th><th>Bets</th><th>Record</th><th title="1 unit on each">ROI</th><th title="price taken vs the price in the last 30 min before the start">CLV</th><th title="won / lost at the stakes the card would have shown">At card stakes</th><th class="l">So far</th></tr></thead><tbody>`+
+    rows.map(({k,a})=>{ const t=shadowTrend(a,k); return `<tr><td class="l"><b>${esc(WHY[k])}</b>${whyOn(k)?'':' <span class="muted">(off)</span>'}</td><td>${a.n}${a.open?` <span class="muted">· ${a.open} open</span>`:''}</td><td>${a.w}-${a.l}${a.p?'-'+a.p:''}</td><td class="${a.roi>0?'ev-pos':a.roi<0?'clv-bad':''}">${pc(a.roi)}</td><td class="${a.clv>0?'ev-pos':a.clv<0?'clv-bad':''}">${pc(a.clv)}${a.cn?` <span class="muted">(${a.cn})</span>`:''}</td><td>${usdTxt(a.usd)}</td><td class="l ${t.c}">${t.t}</td></tr>`; }).join('')+
+    `</tbody></table><div class="muted" style="font-size:12px;margin-top:4px">These are never bet and never touch your bankroll. Want them back on the card? Untick background mode or the filter under odds settings.</div>`;
+  const hot=rows.filter(x=>shadowTrend(x.a,x.k).hot&&whyOn(x.k));
+  if(al) al.innerHTML=hot.length?`<div style="margin:0 0 10px;padding:8px 10px;border-radius:8px;border:1px solid var(--good);font-size:13px">📈 ${hot.map(({k,a})=>`${k==='paper'?'Your background bets':'Bets the <b>'+esc(FILTERS[k])+'</b> filter hid'} are up <b>${pc(a.roi)}</b> over ${a.w+a.l} settled`).join(' · ')} — worth a re-test (details: ⚙ More).</div>`:''; }
 function renderAll(){ buildCands(); buildCard(); renderSlate(); renderGame(); renderBoard(); renderCard(); renderBets(); oddsStatus(); showHistCost(); }
 
 // ---------------------------------------------------------------- auto-settle (ESPN box scores) and closing prices
@@ -1012,6 +1024,7 @@ $('boardAll').onchange=renderBoard; $('pullAll').onclick=()=>pullAll(); $('settl
 $('autoCloseChk').checked=AUTO.close; $('autoHistChk').checked=AUTO.hist;
 $('autoCloseChk').onchange=e=>{ AUTO.close=e.target.checked; lsW('nhlp_auto', AUTO); if(AUTO.close) autoCloses(); };
 $('autoHistChk').onchange=e=>{ AUTO.hist=e.target.checked; lsW('nhlp_auto', AUTO); if(AUTO.hist) autoCloses(); };
+$('paperChk').checked=PAPER; $('paperChk').onchange=e=>{ PAPER=e.target.checked; lsW('nhlp_paper', PAPER); renderAll(); };
 document.querySelectorAll('.filtchk').forEach(x=>{ x.checked=!!FILT[x.value]; x.onchange=()=>{ FILT[x.value]=x.checked; lsW('nhlp_filt', FILT); renderAll(); }; });
 $('betBody').addEventListener('change', e=>{ const b=bets.find(x=>x.id===e.target.dataset.id); if(!b) return;
   if(e.target.classList.contains('betclose')){ b.closeOdds=e.target.value.trim(); delete b.closeEst; delete b.closeSrc; } else if(e.target.classList.contains('betres')){ b.result=e.target.value; delete b.auto; if(b.result==='pending') delete b.st; else b.st=Date.now(); } saveBets(); });
