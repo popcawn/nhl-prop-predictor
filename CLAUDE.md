@@ -155,6 +155,11 @@ bet-log history). See README.md for the model and its backtest.
 - GOTCHA (2026-10-21): many functions here are ONE line. Never add a // comment in the middle of a line — everything after it
   is commented out. A note added after logBet's first check hid `const k=unitUsd();` and every 📓 log button threw
   "k is not defined". Put notes on their own line above.
+- ↩ UNDO A LOG (2026-10-31, user: "create a button that undo log bets if i accidently click log bets"): every bet a click
+  logs calls noteLogged(id) (NFL: logBetFrom, the manual add form, logParlay; NBA/NHL: logBet). One click = one batch
+  (gathered with setTimeout 0) -> pop-up #undoBar "📓 Logged N bets · ↩ Undo · ✕" for 30 s, above the phone tab bar.
+  undoLog() takes the batch's still-open bets out through saveBets (sync tombstones, like the log's ✕); a newer click
+  replaces the pop-up. ANY NEW WAY TO LOG A BET MUST CALL noteLogged.
 - Priced list: the ✓ on a logged bet takes it back OUT of the log (user, 2026-10-21: "i cant remove a logged bet") — hover
   reads "✕ remove", a confirm names the bet, then it is deleted like the bet log's ✕ (a sync tombstone, so other devices drop it).
 - NO NIGHTLY CAP (user, 2026-10-21: "no cap on nhl or nba either"): NIGHT_CAP removed — each bet is sized on its own (¼ Kelly,
