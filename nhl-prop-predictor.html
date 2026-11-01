@@ -283,6 +283,7 @@
           <span id="bankNow" style="font-size:12px"></span>
         </div>
         <div id="bankNote" class="muted" style="font-size:12px;margin-top:6px"></div>
+        <label style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:13px;margin-top:8px;cursor:pointer" title="ON: the money on open bets across NFL, NBA and NHL never goes above your bankroll — the biggest bets go first, the rest wait until settled bets free up room. OFF: every bet the card picks shows, however much is already riding. One switch for all three sports (it rides in ☁ Sync)"><input type="checkbox" id="limitChk" checked> <b>💰 Bankroll limit</b> <span id="limitTxt" class="muted"></span></label>
       </div>
 
       <h2 class="vh" data-m="card">Odds</h2>
@@ -489,7 +490,11 @@ const unitUsd=()=>{ const n=bankNow(); return n!=null?n/UNITS:null; };
 // off the card until settled bets free room up. (A simulation of the season said a half-bankroll limit cost growth for
 // almost no safety; the full bankroll stops the overspending — $257 was riding on $133 on Oct 25.)
 const ridingUsd=()=>allBets().filter(b=>b.result==='pending').reduce((a,b)=>a+(betUsd(b)||0),0);
-function fitRoom(L, usdOf){ const B=bankNow(); if(B==null) return {fit:L.slice(), out:[], bank:null, left:null};
+// 💰 ON / OFF (user, 2026-11-01: "create a on/off toggle for bankroll limit"): BANK.lim===false switches the limit off. It lives
+// in the pot (nfltd_bank), so it is one switch for NFL, NBA and NHL and rides in ☁ Sync; typing a new balance keeps it.
+// Off = every bet the card picks shows, however much is already riding
+function renderLimit(){ const c=$('limitChk'), t=$('limitTxt'); if(!c) return; c.checked=BANK.lim!==false; t.textContent=c.checked?'— open bets never go above your bankroll':'is OFF — every bet shows, even past your bankroll'; }
+function fitRoom(L, usdOf){ const B=bankNow(); if(B==null||BANK.lim===false) return {fit:L.slice(), out:[], bank:B, left:null};
   let left=B-ridingUsd(); const fit=[], out=[];
   for(const c of L.slice().sort((a,b)=>usdOf(b)-usdOf(a))){ const u=usdOf(c); if(u<=left+1e-9){ fit.push(c); left-=u; } else out.push(c); }
   return {fit, out, bank:B, left}; }
@@ -502,7 +507,7 @@ const stakeTxt=u=>{ const k=unitUsd(); return k!=null?fmtUsd(u*k):(Math.round(u*
 // a logged stake as it was bet: the usual $ format when it is a round amount, else to the cent (a hand-typed $2.37 stays $2.37)
 const exactUsd=x=>Math.abs(roundUsd(x)-x)<0.005 ? fmtUsd(x) : '$'+x.toFixed(2);
 const betStakeTxt=b=>BANK.amt&&betUsd(b)!=null?exactUsd(+betUsd(b)):b.stake+'u';
-function renderBank(){ const inp=$('bankUsd'), now=bankNow(); if(document.activeElement!==inp) inp.value=now!=null?Math.round(now*100)/100:'';
+function renderBank(){ renderLimit(); const inp=$('bankUsd'), now=bankNow(); if(document.activeElement!==inp) inp.value=now!=null?Math.round(now*100)/100:'';
   if(now==null){ $('bankNow').textContent=''; renderPotChip(null,0); $('bankNote').textContent='Type what\'s in your betting account and every stake turns into dollars — one pot for NFL, NBA and NHL. It then grows or shrinks by itself as bets settle.'; return; }
   const AB=allBets(), done=AB.filter(b=>b.st>BANK.at&&betPl(b)!=null), d=now-BANK.amt, open=AB.filter(b=>b.result==='pending'), risk=open.reduce((a,b)=>a+(betUsd(b)||0),0);
   const bySport=Object.keys(SPORT_LBL).map(k=>{ const L=done.filter(b=>b.sport===k); return L.length?`${SPORT_LBL[k]} ${(x=>(x>=0?'+':'')+fmtUsd(x))(L.reduce((a,b)=>a+betPl(b),0))}`:''; }).filter(Boolean).join(' · '); renderPotChip(now, open.length);
@@ -1072,8 +1077,9 @@ $('betBody').addEventListener('change', e=>{ const b=bets.find(x=>x.id===e.targe
   if(e.target.classList.contains('betclose')){ b.closeOdds=e.target.value.trim(); delete b.closeEst; delete b.closeSrc; } else if(e.target.classList.contains('betres')){ b.result=e.target.value; delete b.auto; delete b.mid; if(b.result==='pending') delete b.st; else b.st=Date.now(); } saveBets(); });
 $('betBody').addEventListener('click', e=>{ const d=e.target.closest('.betdel'); if(d){ bets=bets.filter(x=>x.id!==d.dataset.id); saveBets(); } });
 $('betBody').addEventListener('toggle', e=>{ const d=e.target; if(!d.classList) return; if(d.classList.contains('daygrp')) LOGOPEN.set(+d.dataset.d, d.open); else if(d.classList.contains('weekgrp')) LOGOPEN.set('W'+d.dataset.w, d.open); }, true);
-$('bankUsd').addEventListener('change', e=>{ const v=+e.target.value||0; BANK=v>0?{amt:+v.toFixed(2), at:Date.now()}:{amt:null, at:0}; saveBank(); renderAll(); });
+$('bankUsd').addEventListener('change', e=>{ const v=+e.target.value||0, lim=BANK.lim; BANK=v>0?{amt:+v.toFixed(2), at:Date.now()}:{amt:null, at:0}; if(lim===false) BANK.lim=false; saveBank(); renderAll(); });
 $('bankUsd').addEventListener('keydown', e=>{ if(e.key==='Enter') e.target.blur(); });
+$('limitChk').addEventListener('change', e=>{ if(e.target.checked) delete BANK.lim; else BANK.lim=false; saveBank(); renderAll(); });
 $('betExport').onclick=()=>{ const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([JSON.stringify({app:'nhl-prop-predictor', exportedAt:new Date().toISOString(), bets, shadow:SHADOW, bank:BANK},null,1)],{type:'application/json'})); a.download=`nhl-bets-${new Date().toISOString().slice(0,10)}.json`; document.body.appendChild(a); a.click(); setTimeout(()=>a.remove(),500); };
 $('betImport').onclick=()=>$('betImportFile').click();
 $('betImportFile').onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(!f) return; const rd=new FileReader(); rd.onload=()=>{ try{ const d=JSON.parse(rd.result); const have=new Set(bets.map(b=>b.id)); for(const b of (d.bets||[])) if(b&&b.id&&!have.has(b.id)) bets.push(b); bets.sort((x,y)=>String(y.ts).localeCompare(String(x.ts))); if(d.bank&&d.bank.amt&&!BANK.amt){ BANK=d.bank; lsW('nhlp_bank', BANK); } saveBets(); }catch(err){ alert('That file isn\'t an export from this app.'); } }; rd.readAsText(f); e.target.value=''; };
