@@ -361,7 +361,7 @@
           <div class="sub" style="font-size:13px"><b>🕶 Background bets</b> <span class="muted">— what background mode and your filters kept off the card, priced and settled like real bets</span><div id="shadowStats"></div></div>
           <div class="sub" id="testNote" style="font-size:13px;line-height:1.55"></div>
           <div class="sub"><b>Backup</b> <button class="ss" id="betExport">⬇ Export</button> <button class="ss" id="betImport">⬆ Import</button> <input type="file" id="betImportFile" accept=".json,application/json" style="display:none"> <button class="ss" id="betClear">Clear log</button></div>
-          <div class="sub muted" style="font-size:12px;line-height:1.55"><b>How to read it.</b> <b>CLV</b> = how much better your price was than the closing price at the same book; beat the close over many bets and profit follows. <b>Close</b> fills itself: your book's price in the 15 minutes before puck drop while the app is open, or — if you tick it under odds settings — its price 5 minutes before the start from price history. A grey <b>≈</b> CLV is a live read from your last pull. <b>▼ / ▲</b> = the book moved the line since you bet. <b>🤖</b> = settled from ESPN's box score (a scratched player is a void). <b>✋</b> = settle that one yourself.</div>
+          <div class="sub muted" style="font-size:12px;line-height:1.55"><b>How to read it.</b> <b>CLV</b> = how much better your price was than the closing price at the same book; beat the close over many bets and profit follows. <b>Close</b> fills itself: your book's price in the 15 minutes before puck drop while the app is open, or — if you tick it under odds settings — its price 5 minutes before the start from price history. A grey <b>≈</b> CLV is a live read from your last pull. <b>▼ / ▲</b> = the book moved the line since you bet. <b>🤖</b> = settled from ESPN's box score (a scratched player is a void). <b>⏱</b> = settled mid-game — the over was already past its line (the under already lost), checked again at the final. <b>✋</b> = settle that one yourself.</div>
         </details>
       </div>
     </div>
@@ -904,7 +904,7 @@ const cnt=a=>a.open===a.n?`${a.n} open bet${a.n>1?'s':''}`:`${a.n} bet${a.n>1?'s
         const clvTxt=clv!=null?` <b class="${cg(clv)}">${pc(clv)}</b>${b.closeEst?'<span class="muted" title="the line moved — this is the equivalent price at your line"> ≈</span>':''}`:b.result!=='pending'||!b.cur?'':live!=null?` <span class="${cg(live)}" style="font-size:12px" title="${esc((moved?`the line moved to ${b.cur.l} (${b.cur.o}) — about ${b.cur.q} at your line. `:`now ${b.cur.q}. `)+'A live read, not final until the close.')}">${arrowH}<span class="muted">≈ ${esc(b.cur.q)} ${moved?'at your '+mine:'now'} ·</span> ${pc(live)}</span>`:moved?` <span style="font-size:12px">${arrowH}</span>`:'';
         return `<tr><td class="l"><b title="chance when logged: ${b.modelProb!=null?pct(b.modelProb):'—'}">${esc(b.player)}</b> <span class="muted" title="${esc(fmtGame(b.game))}">${mktLabel(b.market)}</span>${b.offBoard&&b.result==='pending'?' <span style="color:var(--warn);font-size:12px" title="your book no longer offers this prop">⚠ off the board</span>':''}</td>`+
           `<td class="odds">${esc(b.odds)}${bkBadge(b.book)}</td><td><input class="betclose" data-id="${b.id}" value="${esc(b.closeOdds||'')}" placeholder="close"${b.closeSrc?` title="${b.closeSrc==='hist'?'your book 5 min before the start (price history)':'your book in the last 15 min before the start'}"`:''} style="width:62px;font-family:var(--mono);font-size:13px;text-align:right">${clvTxt}</td>`+
-          `<td title="${b.stake}u">${betStakeTxt(b)}</td><td class="${b.result==='pending'?'':'muted'}">${amtc(stk*((oddsDec(b.odds)||1)-1))}</td><td><select class="betres ss" data-id="${b.id}">${['pending','win','loss','push'].map(x=>`<option${x===b.result?' selected':''}>${x}</option>`).join('')}</select>${b.auto&&b.result!=='pending'?` <span title="${esc('settled from ESPN: '+b.auto)}">🤖</span>`:''}${b.result==='pending'&&b.autoNote?` <span title="${esc(b.autoNote)}" style="cursor:help">✋</span>`:''}</td>`+
+          `<td title="${b.stake}u">${betStakeTxt(b)}</td><td class="${b.result==='pending'?'':'muted'}">${amtc(stk*((oddsDec(b.odds)||1)-1))}</td><td><select class="betres ss" data-id="${b.id}">${['pending','win','loss','push'].map(x=>`<option${x===b.result?' selected':''}>${x}</option>`).join('')}</select>${b.auto&&b.result!=='pending'?` <span title="${esc((b.mid?'settled mid-game from ESPN\'s live box score — it was already decided; checked again at the final: ':'settled from ESPN: ')+b.auto)}">${b.mid?'⏱':'🤖'}</span>`:''}${b.result==='pending'&&b.autoNote?` <span title="${esc(b.autoNote)}" style="cursor:help">✋</span>`:''}</td>`+
           `<td class="${pl!=null?g(pl):''}">${pl==null?'—':mny(pl)}</td><td><button class="ss betdel" data-id="${b.id}" style="color:var(--warn)">✕</button></td></tr>`; }).join('')+`</tbody></table></div>`;
   [...weeks.keys()].sort((a,b)=>b-a).forEach((ws,wi)=>{ const R=weeks.get(ws), a=agg(R), wOpen=LOGOPEN.has('W'+ws)?LOGOPEN.get('W'+ws):(wi===0||a.open>0);
     html+=`<details class="weekgrp" data-w="${ws}"${wOpen?' open':''}><summary><b>Week of ${fmtD(ws)}</b>${a.w+a.l?plPill(a.net):''} <span class="muted">· ${cnt(a)}${a.w+a.l?` · ${rec(a)}`:''}</span>${a.clv!=null?` <span class="muted">· CLV</span> <b class="${g(a.clv)}">${pc(a.clv)}</b>`:''}`+
@@ -943,22 +943,32 @@ function renderAll(){ buildCands(); buildCard(); renderSlate(); renderGame(); re
 
 // ---------------------------------------------------------------- auto-settle (ESPN box scores) and closing prices
 let AUTO_NOTE='', autoBusy=false;
+// ⏱ MID-GAME (user, 2026-11-01: "are you able to settle bets mid game?" → "yes"): once a game has started, a bet ESPN's live
+// box score has already decided is settled — an over past its line wins, its under loses (shots, goals and points only count
+// up). It keeps mid:1 until the final box score checks it again (a stat correction can flip it); a result set by hand drops
+// mid. Everything else (a scratch, an over not there yet, an under still alive) waits for the final, as before
 async function autoSettle(manual){
-  if(autoBusy) return; const due=b=>b.result==='pending'&&b.ev&&b.key&&Date.now()>Date.parse(b.ko||0)+2.5*3600e3, pend=bets.filter(due).concat(SHADOW.filter(due));
-  if(!pend.length){ if(manual){ $('autoMsg').textContent='🤖 no open bet\'s game has finished yet'; } return; }
-  autoBusy=true; let settled=0, hand=0; const cache=new Map();
+  if(autoBusy) return; const due=b=>b.ev&&b.key&&(b.result==='pending'?Date.now()>Date.parse(b.ko||0):!!b.mid), pend=bets.filter(due).concat(SHADOW.filter(due));
+  if(!pend.length){ if(manual){ $('autoMsg').textContent='🤖 no open bet\'s game has started yet'; } return; }
+  autoBusy=true; let settled=0, hand=0, mid=0, fixed=0, ch=0, shCh=0; const cache=new Map();
   try{ for(const b of pend){ let sum=cache.get(b.ev); if(sum===undefined){ try{ sum=await (await fetch(SUM+b.ev)).json(); }catch(e){ sum=null; } cache.set(b.ev, sum); }
-      const c=sum&&sum.header&&sum.header.competitions&&sum.header.competitions[0]; if(!c||!(c.status&&c.status.type&&c.status.type.completed)) continue;
+      const t=((((sum&&sum.header&&sum.header.competitions)||[])[0]||{}).status||{}).type||{}, fin=!!t.completed, sh=String(b.id).startsWith('sh|');
+      if(!fin&&(t.state!=='in'||b.result!=='pending')) continue;
       const id=b.key.split('|')[1]; let row=null, K=null; for(const tb of ((sum.boxscore&&sum.boxscore.players)||[])) for(const st of (tb.statistics||[])){ const a=(st.athletes||[]).find(x=>String(x.athlete.id)===id); if(a){ row=a; K=st.keys||[]; } }
-      if(!row||!(row.stats||[]).length){ b.result='push'; b.auto='not in the box score (scratched) — void'; b.st=Date.now(); delete b.autoNote; settled++; continue; }
+      const played=!!row&&(row.stats||[]).length>0;
+      if(!fin&&!played) continue;
+      if(b.mid&&!played){ delete b.mid; sh?shCh++:ch++; continue; }
+      if(!played){ b.result='push'; b.auto='not in the box score (scratched) — void'; b.st=Date.now(); delete b.autoNote; sh?shCh++:settled++; continue; }
       const num=n=>{ const v=parseFloat(row.stats[K.indexOf(n)]); return isNaN(v)?0:v; }, [,s,side,line]=b.market.split('|');
-      const v=s==='sog'?num('shotsTotal'):s==='goal'?num('goals'):s==='pts'?num('goals')+num('assists'):null; if(v==null){ hand++; continue; }
-      b.result=v===+line?'push':((v>+line)===(side==='O')?'win':'loss'); b.auto=`${SHORT[s]} ${v}`; b.st=Date.now(); delete b.autoNote; settled++; }
-    const sh=pend.filter(b=>String(b.id).startsWith('sh|')), shDone=sh.filter(b=>b.result!=='pending').length, shHand=sh.filter(b=>b.result==='pending'&&b.autoNote).length;
-    for(const r of sh) if(r.result==='pending'&&r.autoNote&&Date.now()>Date.parse(r.ko||0)+36*3600e3){ r.result='push'; r.auto='not in the box score — void'; r.st=Date.now(); }
-    settled-=shDone; hand-=shHand; if(sh.length) saveShadow();
-    if(settled||hand) saveBets(); else if(shDone){ renderAll(); syncSoon(); }
-    AUTO_NOTE=[settled?`🤖 settled <b>${settled}</b> bet${settled>1?'s':''} from ESPN's box scores`:'', hand?`<span style="color:var(--warn)">${hand} to settle by hand (✋)</span>`:''].filter(Boolean).join(' · ')||(manual?'🤖 nothing final yet':AUTO_NOTE);
+      const v=s==='sog'?num('shotsTotal'):s==='goal'?num('goals'):s==='pts'?num('goals')+num('assists'):null; if(v==null){ if(fin&&!sh) hand++; continue; }
+      if(!fin){ if(!(v>+line)) continue; b.result=side==='O'?'win':'loss'; b.mid=1; b.auto=`${SHORT[s]} ${v} mid-game`; b.st=Date.now(); delete b.autoNote; if(sh) shCh++; else { settled++; mid++; } continue; }
+      const r=v===+line?'push':((v>+line)===(side==='O')?'win':'loss'); b.auto=`${SHORT[s]} ${v}`;
+      if(b.mid){ delete b.mid; if(r!==b.result){ b.result=r; b.st=Date.now(); if(!sh) fixed++; } sh?shCh++:ch++; continue; }
+      b.result=r; b.st=Date.now(); delete b.autoNote; sh?shCh++:settled++; }
+    for(const r of pend) if(String(r.id).startsWith('sh|')&&r.result==='pending'&&r.autoNote&&Date.now()>Date.parse(r.ko||0)+36*3600e3){ r.result='push'; r.auto='not in the box score — void'; r.st=Date.now(); shCh++; }
+    if(pend.some(b=>String(b.id).startsWith('sh|'))) saveShadow();
+    if(settled||hand||ch) saveBets(); else if(shCh){ renderAll(); syncSoon(); }
+    AUTO_NOTE=[settled?`🤖 settled <b>${settled}</b> bet${settled>1?'s':''} ${mid===settled?'mid-game — already decided, checked again at the final':`from ESPN's box scores${mid?` (${mid} mid-game — already decided, checked again at the final)`:''}`}`:'', fixed?`<span style="color:var(--warn)">${fixed} mid-game result${fixed>1?'s':''} changed at the final</span>`:'', hand?`<span style="color:var(--warn)">${hand} to settle by hand (✋)</span>`:''].filter(Boolean).join(' · ')||(manual?'🤖 nothing decided yet':AUTO_NOTE);
     $('autoMsg').innerHTML=AUTO_NOTE;
   }finally{ autoBusy=false; }
 }
@@ -1059,7 +1069,7 @@ $('autoHistChk').onchange=e=>{ AUTO.hist=e.target.checked; lsW('nhlp_auto', AUTO
 $('paperChk').checked=PAPER; $('paperChk').onchange=e=>{ PAPER=e.target.checked; lsW('nhlp_paper', PAPER); renderAll(); };
 document.querySelectorAll('.filtchk').forEach(x=>{ x.checked=!!FILT[x.value]; x.onchange=()=>{ FILT[x.value]=x.checked; lsW('nhlp_filt', FILT); renderAll(); }; });
 $('betBody').addEventListener('change', e=>{ const b=bets.find(x=>x.id===e.target.dataset.id); if(!b) return;
-  if(e.target.classList.contains('betclose')){ b.closeOdds=e.target.value.trim(); delete b.closeEst; delete b.closeSrc; } else if(e.target.classList.contains('betres')){ b.result=e.target.value; delete b.auto; if(b.result==='pending') delete b.st; else b.st=Date.now(); } saveBets(); });
+  if(e.target.classList.contains('betclose')){ b.closeOdds=e.target.value.trim(); delete b.closeEst; delete b.closeSrc; } else if(e.target.classList.contains('betres')){ b.result=e.target.value; delete b.auto; delete b.mid; if(b.result==='pending') delete b.st; else b.st=Date.now(); } saveBets(); });
 $('betBody').addEventListener('click', e=>{ const d=e.target.closest('.betdel'); if(d){ bets=bets.filter(x=>x.id!==d.dataset.id); saveBets(); } });
 $('betBody').addEventListener('toggle', e=>{ const d=e.target; if(!d.classList) return; if(d.classList.contains('daygrp')) LOGOPEN.set(+d.dataset.d, d.open); else if(d.classList.contains('weekgrp')) LOGOPEN.set('W'+d.dataset.w, d.open); }, true);
 $('bankUsd').addEventListener('change', e=>{ const v=+e.target.value||0; BANK=v>0?{amt:+v.toFixed(2), at:Date.now()}:{amt:null, at:0}; saveBank(); renderAll(); });

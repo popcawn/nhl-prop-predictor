@@ -165,6 +165,14 @@ bet-log history). See README.md for the model and its backtest.
   small card (name on top, 3-column grid of numbers, each with its column name from data-l above it). Used by By
   sportsbook, Background bets and NFL's When you bet. A NEW WIDE TABLE MUST DO THE SAME or sit in a .scroll box, never
   widen the page.
+- ⏱ MID-GAME SETTLING (2026-11-01, user: "are you able to settle bets mid game?" → "yes"): a bet is due once its game
+  starts (was start + 2.5 h). While ESPN says state 'in', an over already past its line wins and its under loses (shots,
+  goals, points only count up — anytime goal wins on the goal); scratches and everything else wait for the final.
+  Background (SHADOW) bets too.
+  It carries b.mid=1 (log icon ⏱, b.auto "… mid-game") until the game is final; then autoSettle checks it again
+  against the final box score (a stat correction flips it — note "N mid-game results changed at the final") and drops mid.
+  A result set by hand deletes mid, so it is never touched again. Settle runs on open + every 10 min while the app is
+  open (ESPN, free). Tested 2026-11-01 with a mocked ESPN (live -> final, incl. a correction) and once on a real live game.
 - Priced list: the ✓ on a logged bet takes it back OUT of the log (user, 2026-10-21: "i cant remove a logged bet") — hover
   reads "✕ remove", a confirm names the bet, then it is deleted like the bet log's ✕ (a sync tombstone, so other devices drop it).
 - NO NIGHTLY CAP (user, 2026-10-21: "no cap on nhl or nba either"): NIGHT_CAP removed — each bet is sized on its own (¼ Kelly,
