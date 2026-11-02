@@ -31,6 +31,8 @@
   .plpill{display:inline-block;font-weight:900;font-size:14px;padding:1px 10px;border-radius:999px;margin-left:8px;vertical-align:1px}
   .plpill.pos{background:rgba(52,211,153,.16);color:var(--good)} .plpill.neg{background:rgba(248,113,113,.17);color:var(--bad)} .plpill.zero{background:var(--panel2);color:var(--ink2)}
   .clv-bad{color:var(--bad);font-weight:800}
+  /* bet log result box: win = bold green, loss = red (user, 2026-11-01). Options are pending, win, loss, push in that order */
+  select.betres:has(option:nth-child(2):checked){color:var(--good);font-weight:800;border-color:var(--good)} select.betres:has(option:nth-child(3):checked){color:var(--bad);border-color:var(--bad)} select.betres option{color:var(--ink);font-weight:400}
   table.bkstat{max-width:640px;margin-top:6px} table.bkstat td.l{white-space:normal} #shadowStats table.bkstat{width:auto;max-width:100%} table.bkstat td, table.bkstat th{padding:5px 7px;font-size:12.5px}
   input,select,textarea{background:var(--panel2);color:var(--ink);border:1px solid var(--line2);border-radius:8px;padding:5px 8px;font:inherit}
   button{font:inherit;cursor:pointer}
