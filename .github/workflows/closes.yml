@@ -1,0 +1,35 @@
+# 🤖 Closing prices for the NBA + NHL apps' bets (closes/closes.mjs). Every 10 min through the game window (16:00-04:59 UTC):
+# a game starting within 30 min that has open bets without a close gets ONE pull of its markets at your five books
+# (1 credit per market); the prices go to <sport>-closes.json in the ☁ Sync gist and the apps copy them in when they sync.
+# Needs two repo secrets: ODDS_API_KEY (The Odds API) and SYNC_TOKEN (a GitHub token with the gist scope).
+name: Closing prices
+
+on:
+  schedule:
+    - cron: '*/10 16-23 * * *'
+    - cron: '*/10 0-4 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'live = pull and save; dry = only list what it would pull'
+        default: 'live'
+
+concurrency:
+  group: closes
+  cancel-in-progress: false
+
+jobs:
+  closes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Take closing prices
+        run: node closes/closes.mjs
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+          CLOSES_MODE: ${{ github.event.inputs.mode || 'live' }}

@@ -530,6 +530,16 @@ window.addEventListener('storage', e=>{ if(e.key==='nfltd_bank'){ BANK=Object.as
 // so a bet logged on the phone shows on the PC. Records carry mt (newest edit wins); deletions are tombstones; the pot
 // (nfltd_bank) rides along and merges by its mt. Set up once in the NFL app's bet log (☁ Sync).
 const SYNC_FILE='nhl-sync.json', GH='https://api.github.com';
+// 🤖 CLOSING-PRICES BOT (2026-11-04, user: "yes build option 1" — only 19 of 178 background bets had a close): closes/closes.mjs
+// in this repo, run every 10 min by GitHub Actions (closes.yml), writes nhl-closes.json / nba-closes.json in this gist
+// ({closes: {betId: {o, t, m}}} = the bet's book at its line, up to 30 min before the start). Each sync copies a close into
+// any bet or background bet that still has none.
+const CLOSES_FILE='nhl-closes.json';
+async function gistJson(gist, name){ const f=gist&&gist.files&&gist.files[name]; if(!f) return null; let txt=f.content; if(f.truncated&&f.raw_url) txt=await (await fetch(f.raw_url,{cache:'no-store'})).text(); try{ return JSON.parse(txt); }catch(e){ return null; } }
+function applyBotCloses(c){ const C=(c&&c.closes)||{}; let sh=0, bt=0;
+  for(const r of SHADOW) if(!r.closeOdds&&C[r.id]){ r.closeOdds=C[r.id].o; sh++; }
+  for(const b of bets) if(!b.closeOdds&&C[b.id]){ b.closeOdds=C[b.id].o; b.closeSrc='bot'; bt++; }
+  if(sh) saveShadow(); if(bt){ stampChanges(); lsW('nhlp_bets', bets); } if(sh||bt) renderAll(); return sh+bt; }
 let TOMB=lsJ('nhlp_tomb', {})||{}, SYNC_ERR=null, SYNC_OK=0, syncBusy=false, syncAgain=false, syncTimer=null;
 const recBody=r=>{ const {mt, ...rest}=r; return JSON.stringify(rest); }, snapOf=L=>new Map(L.map(r=>[r.id, recBody(r)]));
 let betSnap=snapOf(bets);
@@ -557,6 +567,7 @@ async function syncNow(){ const C=syncCfg(); if(!C.token){ syncNote(); return; }
       SHADOW=mergeShadow(SHADOW, remote.shadow); saveShadow();
       if(remote.bank&&(remote.bank.mt||0)>(BANK.mt||0)){ BANK=remote.bank; lsW('nfltd_bank', BANK); }
       betSnap=snapOf(bets); lsW('nhlp_bets', bets); lsW('nhlp_tomb', TOMB); if(JSON.stringify(bets)!==before) renderAll(); }
+    applyBotCloses(await gistJson(gist, CLOSES_FILE));
     const mine={app:'nhl-prop-predictor', v:1, at:new Date().toISOString(), bets, tomb:TOMB, bank:BANK, shadow:SHADOW}, canon=p=>JSON.stringify([p.bets, p.tomb, p.bank||null, p.shadow||[]]);
     if(!remote||canon(mine)!==canon(remote)) await gh('/gists/'+gid, {method:'PATCH', body:JSON.stringify({files:{[SYNC_FILE]:{content:JSON.stringify(mine)}}})});
     SYNC_OK=Date.now(); SYNC_ERR=null;
@@ -910,7 +921,7 @@ const cnt=a=>a.open===a.n?`${a.n} open bet${a.n>1?'s':''}`:`${a.n} bet${a.n>1?'s
         const sideOf=String(b.market).split('|')[2], against=moved&&((sideOf==='U'&&b.cur.l>mine)||(sideOf==='O'&&b.cur.l<mine)), arrowH=moved?`<span class="${against?'clv-bad':'ev-pos'}" title="${against?'the line moved against your bet':'the line moved your way'}">${arrow.trim()}</span> `:'';
         const clvTxt=clv!=null?` <b class="${cg(clv)}">${pc(clv)}</b>${b.closeEst?'<span class="muted" title="the line moved — this is the equivalent price at your line"> ≈</span>':''}`:b.result!=='pending'||!b.cur?'':live!=null?` <span class="${cg(live)}" style="font-size:12px" title="${esc((moved?`the line moved to ${b.cur.l} (${b.cur.o}) — about ${b.cur.q} at your line. `:`now ${b.cur.q}. `)+'A live read, not final until the close.')}">${arrowH}<span class="muted">≈ ${esc(b.cur.q)} ${moved?'at your '+mine:'now'} ·</span> ${pc(live)}</span>`:moved?` <span style="font-size:12px">${arrowH}</span>`:'';
         return `<tr><td class="l"><b title="chance when logged: ${b.modelProb!=null?pct(b.modelProb):'—'}">${esc(b.player)}</b> <span class="muted" title="${esc(fmtGame(b.game))}">${mktLabel(b.market)}</span>${b.offBoard&&b.result==='pending'?' <span style="color:var(--warn);font-size:12px" title="your book no longer offers this prop">⚠ off the board</span>':''}</td>`+
-          `<td class="odds">${esc(b.odds)}${bkBadge(b.book)}</td><td><input class="betclose" data-id="${b.id}" value="${esc(b.closeOdds||'')}" placeholder="close"${b.closeSrc?` title="${b.closeSrc==='hist'?'your book 5 min before the start (price history)':'your book in the last 15 min before the start'}"`:''} style="width:62px;font-family:var(--mono);font-size:13px;text-align:right">${clvTxt}</td>`+
+          `<td class="odds">${esc(b.odds)}${bkBadge(b.book)}</td><td><input class="betclose" data-id="${b.id}" value="${esc(b.closeOdds||'')}" placeholder="close"${b.closeSrc?` title="${b.closeSrc==='hist'?'your book 5 min before the start (price history)':b.closeSrc==='bot'?'your book up to 30 min before the start (the closing-prices bot)':'your book in the last 15 min before the start'}"`:''} style="width:62px;font-family:var(--mono);font-size:13px;text-align:right">${clvTxt}</td>`+
           `<td title="${b.stake}u">${betStakeTxt(b)}</td><td class="${b.result==='pending'?'':'muted'}">${amtc(stk*((oddsDec(b.odds)||1)-1))}</td><td><select class="betres ss" data-id="${b.id}">${['pending','win','loss','push'].map(x=>`<option${x===b.result?' selected':''}>${x}</option>`).join('')}</select>${b.auto&&b.result!=='pending'?` <span title="${esc((b.mid?'settled mid-game from ESPN\'s live box score — it was already decided; checked again at the final: ':'settled from ESPN: ')+b.auto)}">${b.mid?'⏱':'🤖'}</span>`:''}${b.result==='pending'&&b.autoNote?` <span title="${esc(b.autoNote)}" style="cursor:help">✋</span>`:''}</td>`+
           `<td class="${pl!=null?g(pl):''}">${pl==null?'—':mny(pl)}</td><td><button class="ss betdel" data-id="${b.id}" style="color:var(--warn)">✕</button></td></tr>`; }).join('')+`</tbody></table></div>`;
   [...weeks.keys()].sort((a,b)=>b-a).forEach((ws,wi)=>{ const R=weeks.get(ws), a=agg(R), wOpen=LOGOPEN.has('W'+ws)?LOGOPEN.get('W'+ws):(wi===0||a.open>0);

@@ -47,7 +47,7 @@ bet-log history). See README.md for the model and its backtest.
   BetRivers (not in the user's state). State falls back to the NFL app's `nfltd_oddscfg.state` (same site).
 
 ## App structure
-- 🕶 BACKGROUND ONLY (2026-10-27, user: "should we go all in on nfl and backgroudn nba and nhl" → "yes"): PAPER (localStorage `nhlp_paper`, default ON, #paperChk first under odds settings). buildCard puts nothing on the card; every would-be bet (the card's picks not already in the log, no bankroll limit) goes to SHADOW with why ['paper'] at its card stake, settles with the real bets, rides in sync. Card: "🕶 BACKGROUND ONLY · N would-be bets tracked" + record/ROI/CLV so far; Priced verdict 🕶 tracked; ⚙ More table row "Background mode". Real money goes to NFL only until the ~Nov 8 review. The user must still ⚡ Pull once a day (~60 credits NBA+NHL) or nothing is tracked; no closes are pulled for paper bets (CLV only from a pull in the last 30 min).
+- 🕶 BACKGROUND ONLY (2026-10-27, user: "should we go all in on nfl and backgroudn nba and nhl" → "yes"): PAPER (localStorage `nhlp_paper`, default ON, #paperChk first under odds settings). buildCard puts nothing on the card; every would-be bet (the card's picks not already in the log, no bankroll limit) goes to SHADOW with why ['paper'] at its card stake, settles with the real bets, rides in sync. Card: "🕶 BACKGROUND ONLY · N would-be bets tracked" + record/ROI/CLV so far; Priced verdict 🕶 tracked; ⚙ More table row "Background mode". Real money goes to NFL only until the ~Nov 8 review. The user must still ⚡ Pull once a day (~60 credits NBA+NHL) or nothing is tracked; closes for paper bets come from the 🤖 closing-prices bot (2026-11-04, below; before it only a pull in the last 30 min gave one).
 - BANKROLL LIMIT (2026-10-26, user said yes to the plan — "whatever profits the most money"): the $ on open bets across NFL/NBA/NHL (one pot, allBets()) never goes above bankNow(). fitRoom(list, usdOf) takes new bets biggest $ first; the rest wait (card note 💰 "$X of your $Y bankroll in play · N more bets wait for room", Priced verdict 💰 no room; NFL: week list + TD picks, fun picks and parlays exempt). Held/logged bets already count as riding. A season simulation said a HALF-bankroll limit cost growth for almost no safety — keep it at the full bankroll. Logging by hand from Priced / the game card isn't limited. ON/OFF SWITCH (2026-11-01, user: "create a on/off toggle for bankroll limit"): ☑ 💰 Bankroll limit (#limitChk) under the bankroll box, default ON. Off = BANK.lim===false — it lives IN the pot (nfltd_bank), so it is one switch for NFL/NBA/NHL, rides in ☁ Sync with the pot, and typing a new balance keeps it (setBank / the bankUsd handler copy lim). fitRoom() lets every bet through when off (no 💰 notes, no "no room"). renderLimit() runs from renderBank().
 - ALL FIVE BOOKS BY DEFAULT (2026-10-24, user: "is it intentional to have betmgm turned off for nba" — no): the book list is saved per device and a new device started with FanDuel + DraftKings only (the user's desktop had all five; the phone likely not). Default is now FD, DK, BetMGM, Caesars, Fanatics; a device that saved fewer gets the rest added ONCE (`nhlp_oddscfg.booksV2`, kept by the settings save); unticking after that sticks. Don't drop books from the default: the real-price test found the NBA edge in shopping all five.
 - localStorage prefix `nhlp_` (bets, bank, boards 3 days, status per day incl. `G|game|team` goalie picks, oddscfg,
@@ -100,6 +100,30 @@ bet-log history). See README.md for the model and its backtest.
   history was ticked → filled from start−5 min (11 credits); start in 20 min → nothing; re-checks spend nothing; credits
   below the reserve → paused with a note; document.prerendering → nothing until activation. The real historical endpoint
   was NOT called — it is the NFL app's (tested there on IND@WAS 2026-10-04).
+
+## 🤖 Closing-prices bot (2026-11-04, user: "why does only 19 nhl bets have a closing price" → "yes build option 1")
+- Why: background bets (paper since 10-27) only got a close when a pull happened in the last 30 min before the start, i.e.
+  only if a page was open then — 19 of 178 NHL and 18 of 295 NBA background bets had one (Oct 28: 0 of 37, Oct 30: 0 of 40).
+- `closes/closes.mjs` + `.github/workflows/closes.yml` (THIS repo; covers NBA too): every 10 min 16:00–04:59 UTC. Reads
+  nhl-sync.json / nba-sync.json from the ☁ Sync gist; every pending prop bet (shadow + real) without a close whose game
+  starts within 30 min → ONE pull per game of only its markets at the five books (`bookmakers=` = 1 region, 1 credit per
+  market; /events is free) → the bet's book's price at its exact line and side (the apps' background rule) → writes
+  nhl-closes.json / nba-closes.json in the gist: {closes: {betId: {o, t, m}}, moved: {betId: {l, o, t, m}} (the book
+  changed the line — the nearest line's price, kept for a later estimate; the apps ignore it), tried: {game|start: t}}.
+  Never writes the apps' files (no race). Stops below CLOSES_RESERVE (1000). Matching = the apps' own (snapshot teams via
+  abbrByName, gamePlayers + matchPlayer; NHL skips goalies; the NBA snapshot is read from raw.githubusercontent).
+- Apps: `syncNow()` reads `<sport>-closes.json` (`gistJson`) and `applyBotCloses()` copies a close into any bet or
+  background bet that has none (real bets get closeSrc 'bot' + an mt stamp; the Close box title names the bot). The apps'
+  own live / history closes still run; a bot close arrives first, so history spends less.
+- SECRETS the USER adds in THIS repo (Settings → Secrets and variables → Actions): ODDS_API_KEY (the 100K-plan key in
+  nfl-td-predictor/.odds-key) and SYNC_TOKEN (a GitHub token with the gist scope). Without them a run logs a warning and
+  exits 0. Manual run: Actions → Closing prices → Run workflow (mode dry = list only, no credits).
+- Cost: ~30 credits on a full NBA + NHL night (dry run 2026-11-04: 13 NBA + 3 NHL games with open bets), ~1,000/month.
+- TESTED 2026-11-04: dry runs on the user's 43 real open background bets; a LIVE pull at a pretend 23:40Z for ATL@WSH +
+  PHI@DET (3 credits, 92,154 left) filled 2 of 3 — the third was Maxey pts 22.5 at BetMGM, whose line had moved to 24.5
+  (checked, 1 credit) -> why `moved` exists; a mocked Odds API (scratch mockfetch.mjs): exact, moved, "T. Maxey" initial
+  match, not on the board, already started, reserve stop, a re-run spends 0, no secrets -> warning. The real gist calls
+  were NOT exercised here (no token on this PC) — they are the apps' own endpoints (GET /gists, GET /gists/{id}, PATCH).
 
 ## One site, one pot (2026-10-16, user: "combine all into one sim … make them like the nfl sim … one pot")
 - The NFL, NBA and NHL apps are separate repos on ONE site (popcawn.github.io), so they share one browser storage. Each
