@@ -82,6 +82,8 @@ async function saveFiles(G, files) {
 if (!MOCK && !TOKEN) { console.log('::warning::SYNC_TOKEN secret is not set (repo Settings → Secrets and variables → Actions) — nothing to do'); process.exit(0); }
 if (MODE !== 'dry' && !KEY) { console.log('::warning::ODDS_API_KEY secret is not set (repo Settings → Secrets and variables → Actions) — nothing to do'); process.exit(0); }
 let left = null, spent = 0, stop = false;
+// one-line run summary as a GitHub notice: annotations of a public repo can be read without a login (the logs can't)
+const notes = [];
 const G = await loadGist(), write = {};
 for (const sp of SPORTS) {
   const sync = await fileJson(G, sp.file);
@@ -96,6 +98,7 @@ for (const sp of SPORTS) {
   for (const r of recs) { const k0 = Date.parse(r.ko || ''); if (!(k0 > NOW) || k0 - NOW > WINDOW) continue; const gk = r.game + '|' + new Date(k0).toISOString(); if (C.tried[gk]) continue;
     const x = due.get(gk) || due.set(gk, { gk, game: r.game, k0, L: [], mk: new Set() }).get(gk); x.L.push(r); x.mk.add(sp.oa[r.market.split('|')[1]]); }
   console.log(`${sp.id}: ${recs.length} open bet(s) without a close · ${due.size} game(s) starting within ${WINDOW / 60e3} min`);
+  notes.push(`${sp.id} ${recs.length} open, ${due.size} due`);
   if (due.size && !stop) {
     const S = sp.snap.startsWith('http') ? (await getJson(sp.snap)).j : JSON.parse(fs.readFileSync(sp.snap, 'utf8'));
     const events = MODE === 'dry' ? [] : (await getJson(`${ODDS}/${sp.api}/events?apiKey=${encodeURIComponent(KEY)}`)).j;
@@ -118,9 +121,12 @@ for (const sp of SPORTS) {
         if (nq) { C.moved[r.id] = { l: near.line, o: nq, t: NOW, m: mins }; mv++; } }
       C.tried[x.gk] = NOW;
       console.log(`  ${x.game}: ${n} of ${x.L.length} bet(s) got a close${mv ? `, ${mv} line(s) moved` : ''} (${M.length} credit(s), ${mins} min before the start)`);
+      notes.push(`${x.game} ${n}/${x.L.length} closed${mv ? ` ${mv} moved` : ''} at -${mins}m`);
     }
   }
   if (JSON.stringify([C.closes, C.moved, C.tried]) !== before) write[sp.out] = JSON.stringify(C);
 }
 if (Object.keys(write).length && MODE !== 'dry') await saveFiles(G, write);
-console.log(`credits used ${spent}${left != null ? ` · ${left} left` : ''}${Object.keys(write).length && MODE !== 'dry' ? ` · wrote ${Object.keys(write).join(', ')}` : ''}`);
+const wrote = Object.keys(write).length && MODE !== 'dry' ? Object.keys(write).join(', ') : '';
+console.log(`credits used ${spent}${left != null ? ` · ${left} left` : ''}${wrote ? ` · wrote ${wrote}` : ''}`);
+if (process.env.GITHUB_ACTIONS) console.log(`::notice title=Closing prices (${MODE})::${notes.join(' · ')} · credits ${spent}${left != null ? ` (${left} left)` : ''}${wrote ? ` · wrote ${wrote}` : ''}`);
