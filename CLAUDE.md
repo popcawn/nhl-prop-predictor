@@ -117,9 +117,11 @@ bet-log history). See README.md for the model and its backtest.
   (/v4/historical/.../events/{id}/odds) at its start - 2 min: 10 credits per market + 1 per day's game list
   (/historical/.../events at the day's first start - 30 min). Settled bets count (not pushes; not ones already `moved`);
   a player traded since matches by the bet's own name (`players()` adds the bets' players to the rosters); at most
-  CLOSES_HIST_CAP (800) credits a run, the rest next run. Workflow inputs mode / days / cap; scheduled runs use days 0
-  (= OFF) until the user OKs the credits — then set the `|| '0'` default in closes.yml to 3. A daily '23 9' cron was
-  added so at least one run a day happens (late).
+  CLOSES_HIST_CAP (800) credits a run, the rest next run. Workflow inputs mode / days / cap. ON since 2026-11-05 (user:
+  "build the backfill"): scheduled runs and the Run-workflow default look back 3 days (`|| '3'` in closes.yml; 0 = off).
+  The catch-up pauses after CLOSES_TIME_MIN (6) minutes so a long run still saves before the job's 10-min limit (the gist
+  is written once, at the end — a killed job would lose the credits it spent), and each Odds API call gives up after 30 s.
+  A daily '23 9' cron was added so at least one run a day happens (late).
   Never writes the apps' files (no race). Stops below CLOSES_RESERVE (1000). Matching = the apps' own (snapshot teams via
   abbrByName, gamePlayers + matchPlayer; NHL skips goalies; the NBA snapshot is read from raw.githubusercontent).
 - Apps: `syncNow()` reads `<sport>-closes.json` (`gistJson`) and `applyBotCloses()` copies a close into any bet or
@@ -140,6 +142,12 @@ bet-log history). See README.md for the model and its backtest.
   Catch-up tested on a mocked history API (scratch mockfetch2.mjs + mockgist3.mjs): live + catch-up in one run, settled /
   push / closed / too old / moved / just started / traded player, re-run spends 0, cap pauses, dry estimates, days 0 = off.
   One real history pull (ATL@WSH pra, 10 credits): snapshot 6.5 min before the real tip, FanDuel/DK/BetMGM/Fanatics all there.
+- BACKFILL 2026-11-05 15:21Z (run #7, manual, days 25, cap 3000; took 2.5 min): NHL 54 games, 148/162 closed, 5 moved;
+  NBA 75 games, 215/295 closed, 59 moved; 2,569 credits (88,836 left). Every bot close was applied by the apps' sync:
+  background bets with a close NHL 21 -> 167 of 194, NBA 24 -> 235 of 318 (in the gist).
+- FOUND THEN: the user's PC Chrome localStorage for popcawn.github.io was FULL (5,242,861 of 5,242,880 chars — mostly
+  caches: nfltd_boards 1.76M, nbap_boards 0.98M, nfltd_slatepx 0.84M, nhlp_boards 0.81M), so every lsW that grows a key
+  fails silently. The apps still apply closes in memory on each sync and the gist keeps them, but the local copies stay old.
 
 ## One site, one pot (2026-10-16, user: "combine all into one sim … make them like the nfl sim … one pot")
 - The NFL, NBA and NHL apps are separate repos on ONE site (popcawn.github.io), so they share one browser storage. Each
