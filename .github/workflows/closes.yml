@@ -1,7 +1,7 @@
 # 🤖 Closing prices for the NBA + NHL apps' bets (closes/closes.mjs). Two ways:
 #  • live: a game starting within 30 min that has open bets without a close gets ONE pull of its markets at your five
 #    books (1 credit per market);
-#  • catch-up (days > 0): a game that already started gets the price ~2 min before its start from The Odds API's price
+#  • catch-up (ON since 2026-11-05, user: "build the backfill"; the timer looks back 3 days): a game that already started gets the price ~2 min before its start from The Odds API's price
 #    history (10 credits per market) — GitHub runs this account's timed jobs 3-10 HOURS late (checked 2026-11-04 over
 #    5 weeks), so the live pull rarely lands in time and the catch-up is what fills the gaps.
 # The prices go to <sport>-closes.json in the ☁ Sync gist and the apps copy them in when they sync.
@@ -20,7 +20,7 @@ on:
         default: 'live'
       days:
         description: 'catch-up: look back this many days for started games without a close (0 = off)'
-        default: '0'
+        default: '3'
       cap:
         description: 'catch-up: most credits one run may spend'
         default: '800'
@@ -32,7 +32,7 @@ concurrency:
 jobs:
   closes:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -44,5 +44,5 @@ jobs:
           ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
           SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
           CLOSES_MODE: ${{ github.event.inputs.mode || 'live' }}
-          CLOSES_HIST_DAYS: ${{ github.event.inputs.days || '0' }}
+          CLOSES_HIST_DAYS: ${{ github.event.inputs.days || '3' }}
           CLOSES_HIST_CAP: ${{ github.event.inputs.cap || '800' }}

@@ -14,6 +14,7 @@
 // `closes` into the bets when they sync (applyBotCloses). The bot never writes the apps' own files, so it can't race them.
 // Env: ODDS_API_KEY + SYNC_TOKEN (gist scope) are repo secrets; optional SYNC_GIST_ID, CLOSES_MODE=dry (no pulls, no
 // writes), CLOSES_WINDOW_MIN (30), CLOSES_HIST_DAYS (catch-up look-back, 0 = off), CLOSES_HIST_CAP (800 credits a run),
+// CLOSES_TIME_MIN (6: the catch-up pauses after this many minutes so the run saves before the job's time limit),
 // CLOSES_RESERVE (1000 credits), CLOSES_NOW (ISO time, tests), CLOSES_GIST_FILE (a local JSON {files: {name: {content}}}
 // used instead of GitHub, tests).
 import fs from 'node:fs';
@@ -26,7 +27,7 @@ const BOOKS = 'fanduel,draftkings,betmgm,williamhill_us,fanatics';
 const envNum = (k, d) => { const v = process.env[k]; return v != null && v !== '' && !isNaN(+v) ? +v : d; };
 const KEY = process.env.ODDS_API_KEY || '', TOKEN = process.env.SYNC_TOKEN || '', MODE = process.env.CLOSES_MODE || 'live';
 const WINDOW = envNum('CLOSES_WINDOW_MIN', 30) * 60e3, RESERVE = envNum('CLOSES_RESERVE', 1000);
-const DAYS = envNum('CLOSES_HIST_DAYS', 0), CAP = envNum('CLOSES_HIST_CAP', 800), LAG = 15 * 60e3;
+const DAYS = envNum('CLOSES_HIST_DAYS', 0), CAP = envNum('CLOSES_HIST_CAP', 800), LAG = 15 * 60e3, BUDGET = envNum('CLOSES_TIME_MIN', 6) * 60e3, T0 = Date.now();
 const NOW = process.env.CLOSES_NOW ? Date.parse(process.env.CLOSES_NOW) : Date.now(), MOCK = process.env.CLOSES_GIST_FILE || '';
 const SPORTS = [
   { id: 'nhl', api: 'icehockey_nhl', file: 'nhl-sync.json', out: 'nhl-closes.json', snap: path.join(DIR, '..', 'nhl-snapshot.json'),
@@ -81,7 +82,7 @@ const findEv = (events, S, x) => { const [away, home] = x.game.split('@');
   return events.find(e => abbrByName(S, e.away_team) === away && abbrByName(S, e.home_team) === home && Math.abs(Date.parse(e.commence_time) - x.k0) < 12 * 3600e3); };
 
 const hide = s => String(s).replace(/apiKey=[^&]+/g, 'apiKey=***');
-async function getJson(url) { const r = await fetch(url); if (!r.ok) { const e = new Error(`${r.status} ${hide(url)}`); e.status = r.status; throw e; } return { j: await r.json(), h: r.headers }; }
+async function getJson(url) { const r = await fetch(url, { signal: AbortSignal.timeout(30e3) }); if (!r.ok) { const e = new Error(`${r.status} ${hide(url)}`); e.status = r.status; throw e; } return { j: await r.json(), h: r.headers }; }
 async function gh(p, opt = {}) {
   const r = await fetch(GH + p, { method: opt.method || 'GET', body: opt.body, headers: Object.assign({ Authorization: 'Bearer ' + TOKEN, Accept: 'application/vnd.github+json', 'User-Agent': 'closes-bot' }, opt.body ? { 'Content-Type': 'application/json' } : {}) });
   if (!r.ok) { const e = new Error('GitHub ' + r.status + ' ' + p); e.status = r.status; throw e; } return r.json();
@@ -162,13 +163,15 @@ for (const sp of SPORTS) {
     for (const [d, xs] of [...byDay].sort()) {
       if (stop || capped) break;
       if (MODE === 'dry') { est += 1; for (const x of xs) { est += 10 * x.mk.size; console.log(`  would catch up ${x.game} (${d}: ${[...x.mk].join(', ')}) for ${x.L.length} bet(s): ${10 * x.mk.size} credits`); } continue; }
-      if (histSpent + 11 > CAP) { console.log(`  catch-up paused at the ${CAP}-credit cap for one run — the rest next run`); capped = true; break; }
+      if (histSpent + 11 > CAP) { console.log(`  catch-up paused at the ${CAP}-credit cap for one run — the rest next run`); capped = 'credit cap'; break; }
+      if (Date.now() - T0 > BUDGET) { console.log(`  catch-up paused after ${BUDGET / 60e3} min (the job's time limit) — the rest next run`); capped = 'time limit'; break; }
       let evs;
       try { const r = await getJson(`${HIST}/${sp.api}/events?apiKey=${K}&date=${iso(Math.min(...xs.map(x => x.k0)) - 30 * 60e3)}`); evs = (r.j && r.j.data) || []; const c = credits(r.h); spent += c; histSpent += c; }
       catch (e) { console.log(`  ${d}: the history's game list failed (${e.message}) — tried again next run`); if (e.status === 401 || e.status === 429) stop = true; continue; }
       for (const x of xs) {
         const M = [...x.mk], cost = 10 * M.length;
-        if (histSpent + cost > CAP) { console.log(`  catch-up paused at the ${CAP}-credit cap for one run — the rest next run`); capped = true; break; }
+        if (histSpent + cost > CAP) { console.log(`  catch-up paused at the ${CAP}-credit cap for one run — the rest next run`); capped = 'credit cap'; break; }
+        if (Date.now() - T0 > BUDGET) { console.log(`  catch-up paused after ${BUDGET / 60e3} min (the job's time limit) — the rest next run`); capped = 'time limit'; break; }
         if (left != null && left - cost < RESERVE) { console.log(`  stopped: ${left} credits left, reserve ${RESERVE}`); stop = true; break; }
         const ev = findEv(evs, S, x);
         if (!ev) { console.log(`  ${x.game} (${d}): not in the price history — skipped`); for (const m of M) C.pulled[x.gk + '|' + m] = NOW; continue; }
@@ -186,7 +189,7 @@ for (const sp of SPORTS) {
       }
     }
     if (MODE === 'dry') notes.push(`${sp.id} catch-up would cost ~${est} credits`);
-    else if (hg) notes.push(`${sp.id} caught up ${hg} game(s): ${hn}/${hb} closed${hmv ? `, ${hmv} moved` : ''}`);
+    else if (hg || capped) notes.push(`${sp.id} caught up ${hg} game(s): ${hn}/${hb} closed${hmv ? `, ${hmv} moved` : ''}${capped ? ` (paused at the ${capped}, the rest next run)` : ''}`);
   }
   if (spent > spent0) { const d = iso(NOW).slice(0, 10); C.spent[d] = (C.spent[d] || 0) + spent - spent0; }
   if (JSON.stringify([C.closes, C.moved, C.pulled]) !== before || spent > spent0) write[sp.out] = JSON.stringify(C);
