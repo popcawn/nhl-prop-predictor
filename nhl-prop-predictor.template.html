@@ -382,7 +382,32 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const pct=p=>(p*100).toFixed(1)+'%', clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
 const lsJ=(k,d)=>{ try{ const v=localStorage.getItem(k); return v==null?d:JSON.parse(v); }catch(e){ return d; } };
-const lsW=(k,v)=>{ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} };
+// 🧹 STORAGE GUARD (2026-11-05, user: "yes add the cleanup"): the NFL, NBA and NHL apps are one site, so they share ONE
+// ~5 MB browser storage, and the user's PC had filled it (4.4 MB of old odds caches) — every write that grew a key failed
+// silently. Each app now trims its own odds caches (games that started, prices too old to reuse), and lsSave() — every
+// lsW plus the NFL bets and slip — makes room when a write doesn't fit: first the cached odds any app can tell are stale
+// (staleOdds), then the oldest third of the rest (any app's), trying again up to 4 times. Bets, bankroll and settings are
+// never dropped. OWN_CACHE: cache key -> () => this app's live cache object, so what's dropped leaves memory too.
+const CACHE_KEYS=['nfltd_slatepx','nfltd_boards','nbap_boards','nhlp_boards'], OWN_CACHE={};
+// stale = slate prices past their 20-min reuse, NBA/NHL boards 6 h after the start (or a day after a pull with no start
+// stored), NFL boards 5+ days old (the NFL app also knows its kickoffs — trimBoards — the other apps don't)
+const staleBoard=(x,now)=>{ const s=Date.parse((x&&x.ko)||'')||0; return s?now>=s+6*3600e3:!(x&&x.t>now-864e5); };
+const staleOdds={nfltd_slatepx:(x,now)=>!(x&&now-x.t<20*60e3), nfltd_boards:(x,now)=>!(x&&x.t>now-5*864e5), nbap_boards:staleBoard, nhlp_boards:staleBoard};
+function freeRoom(k, v){
+  try{
+    const pools=[], now=Date.now();
+    for(const c of CACHE_KEYS){ let o=c===k?v:null;
+      if(!o&&OWN_CACHE[c]){ try{ o=OWN_CACHE[c](); }catch(e){} }
+      if(!o){ try{ o=JSON.parse(localStorage.getItem(c)||'null'); }catch(e){} }
+      if(o&&typeof o==='object') pools.push([c, o]); }
+    const all=[]; let stale=0;
+    for(const [c,o] of pools) for(const [g,x] of Object.entries(o)){ if(staleOdds[c](x, now)){ delete o[g]; stale++; } else all.push([o, g, (x&&x.t)||0]); }
+    if(!stale){ if(!all.length) return false; all.sort((a,b)=>a[2]-b[2]); for(const [o,g] of all.slice(0, Math.ceil(all.length/3))) delete o[g]; }
+    for(const [c,o] of pools) if(c!==k){ try{ localStorage.setItem(c, JSON.stringify(o)); }catch(e){} }
+    return true;
+  }catch(e){ return false; } }
+function lsSave(k, v){ for(let i=0;i<5;i++){ try{ localStorage.setItem(k, JSON.stringify(v)); return true; }catch(e){ if(i===4||!freeRoom(k, v)) return false; } } return false; }
+const lsW=(k,v)=>lsSave(k, v);
 const americanToDec=a=>{ a=+a; if(!a) return null; return a>0?1+a/100:1+100/(-a); };
 const americanToProb=a=>{ a=+a; if(!a) return null; return a>0?100/(a+100):(-a)/((-a)+100); };
 const probToAmerican=p=>{ p=clamp(p,0.001,0.999); const a=p>=0.5?-Math.round(100*p/(1-p)):Math.round(100*(1-p)/p); return (a>0?'+':'')+a; };
@@ -593,7 +618,12 @@ const oaOf=s=>pickedMarkets().filter(k=>OA[k]===s).concat(Object.keys(OA).filter
 const bkBadge=b=>b?`<span class="bktag" title="${esc(bookName(b))} — the best price among your books">${bookTag(b)}</span>`:'';
 const oddsKey=()=>{ try{ return localStorage.getItem('nhlp_oddskey')||localStorage.getItem('nfltd_oddskey')||localStorage.getItem('nbap_oddskey')||''; }catch(e){ return ''; } };   // shares the NFL app's key on the same site
 let oddsLeft=lsJ('nhlp_oddsleft', null), oddsEvents=null;
-let BOARDS=(b=>{ const old=Date.now()-3*864e5; for(const k of Object.keys(b)) if(!(b[k].t>old)) delete b[k]; return b; })(lsJ('nhlp_boards', {}));   // game -> {t, offers, cons, yes, mine}
+// 🧹 (2026-11-05, STORAGE GUARD) a game's board is kept until 6 h after its start (pulls store it as ko since then); an
+// older board without one for a day after its pull. Boards are only used before the start.
+const keepBoard=(b,now)=>!staleBoard(b, now);
+const trimBoards=()=>{ const now=Date.now(); let n=0; for(const k of Object.keys(BOARDS)) if(!keepBoard(BOARDS[k], now)){ delete BOARDS[k]; n++; } return n; };
+let BOARDS=lsJ('nhlp_boards', {})||{};   // game -> {t, ko, offers, cons, yes, mine}
+OWN_CACHE.nhlp_boards=()=>BOARDS; if(trimBoards()) lsW('nhlp_boards', BOARDS);
 const oddsFail=(status,code)=>Object.assign(new Error('odds '+status),{status,code});
 const oddsWhy=e=>{ const s=e&&e.status; return s==='nokey'?'add your The Odds API key under odds settings':s==='noevent'?'not on The Odds API\'s board yet':s==='started'?'already started':s===401?'key rejected':(s===429||s===422)?'out of credits':'couldn\'t reach The Odds API'; };
 function oddsStatus(){ $('oddsLeft').textContent=oddsLeft!=null?`${oddsLeft} credits left`:''; }
@@ -664,17 +694,17 @@ async function pullGame(g, markets){
   const ev=(await eventsList()).find(e=>abbrByName(e.away_team)===g.away&&abbrByName(e.home_team)===g.home); if(!ev) throw oddsFail('noevent');
   if(Date.parse(ev.commence_time)<=Date.now()) throw oddsFail('started');
   const j=await apiGet(`${ODDS_API}/events/${ev.id}/odds?apiKey=${encodeURIComponent(key)}&regions=us&markets=${(markets||pickedMarkets()).join(',')}&oddsFormat=american&includeLinks=true&includeSids=true`);
-  return parseBoard(j, g);
+  const board=parseBoard(j, g); board.ko=ev.commence_time; return board;
 }
 // a pull updates the game's board, and every open bet on it: its book's current price at the bet's own line (live CLV)
 function applyBoard(g, board, partial){
-  if(partial&&BOARDS[g.game]){ const B=BOARDS[g.game]; for(const f of ['offers','cons','yes','mine']) Object.assign(B[f]=B[f]||{}, board[f]); B.t=Date.now(); } else BOARDS[g.game]=board;
+  if(partial&&BOARDS[g.game]){ const B=BOARDS[g.game]; for(const f of ['offers','cons','yes','mine']) Object.assign(B[f]=B[f]||{}, board[f]); B.t=Date.now(); if(board.ko) B.ko=board.ko; } else BOARDS[g.game]=board;
   for(const b of bets){ if(b.result!=='pending'||b.game!==g.game||!b.key) continue; const st=b.market.split('|')[1]; if(!Object.keys(board.mine).some(k=>k.startsWith(st+'|'))) continue;
     const v=closeView(b, board); if(v&&v.odds){ b.cur={q:v.odds, l:v.line, o:v.raw, t:Date.now()}; delete b.offBoard; } else if(!v){ b.offBoard='no longer offered'; delete b.cur; } }
   let shc=0; for(const r of SHADOW){ const k0=Date.parse(r.ko||0); if(r.result!=='pending'||r.game!==g.game||!(k0>Date.now())||k0-Date.now()>30*60e3) continue;
     const v=closeView(r, board); if(v&&v.odds&&!v.est&&r.closeOdds!==v.odds){ r.closeOdds=v.odds; shc++; } }
   if(shc) saveShadow();
-  lsW('nhlp_boards', BOARDS); lsW('nhlp_bets', bets);
+  trimBoards(); lsW('nhlp_boards', BOARDS); lsW('nhlp_bets', bets);
 }
 // the book's price for a logged bet at ITS line: exact, or the nearest line translated with the model's distribution
 function closeView(b, board){ const [,s,side,l]=b.market.split('|'), arr=((board.mine||{})[s+'|'+b.key]||{})[b.book||'fanduel']; if(!arr||!arr.length) return null;
