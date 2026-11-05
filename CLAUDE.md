@@ -109,7 +109,17 @@ bet-log history). See README.md for the model and its backtest.
   starts within 30 min → ONE pull per game of only its markets at the five books (`bookmakers=` = 1 region, 1 credit per
   market; /events is free) → the bet's book's price at its exact line and side (the apps' background rule) → writes
   nhl-closes.json / nba-closes.json in the gist: {closes: {betId: {o, t, m}}, moved: {betId: {l, o, t, m}} (the book
-  changed the line — the nearest line's price, kept for a later estimate; the apps ignore it), tried: {game|start: t}}.
+  changed the line — the nearest line's price, kept for a later estimate; the apps ignore it), pulled: {game|start|market:
+  t} (each game+market is pulled once, live or catch-up), spent: {UTC day: credits}} (v2; v1 had tried: {game|start}).
+- CATCH-UP (2026-11-04, after the first test): GitHub runs this account's TIMED jobs 3-10 HOURS late (5 weeks of the
+  daily refresh crons: 10:37Z fired 13:53-20:29Z) and the */10 timer never fired on the first night, so the live pull
+  rarely lands. A game that started 15+ min ago, within CLOSES_HIST_DAYS days, gets The Odds API's price HISTORY
+  (/v4/historical/.../events/{id}/odds) at its start - 2 min: 10 credits per market + 1 per day's game list
+  (/historical/.../events at the day's first start - 30 min). Settled bets count (not pushes; not ones already `moved`);
+  a player traded since matches by the bet's own name (`players()` adds the bets' players to the rosters); at most
+  CLOSES_HIST_CAP (800) credits a run, the rest next run. Workflow inputs mode / days / cap; scheduled runs use days 0
+  (= OFF) until the user OKs the credits — then set the `|| '0'` default in closes.yml to 3. A daily '23 9' cron was
+  added so at least one run a day happens (late).
   Never writes the apps' files (no race). Stops below CLOSES_RESERVE (1000). Matching = the apps' own (snapshot teams via
   abbrByName, gamePlayers + matchPlayer; NHL skips goalies; the NBA snapshot is read from raw.githubusercontent).
 - Apps: `syncNow()` reads `<sport>-closes.json` (`gistJson`) and `applyBotCloses()` copies a close into any bet or
@@ -118,12 +128,18 @@ bet-log history). See README.md for the model and its backtest.
 - SECRETS the USER adds in THIS repo (Settings → Secrets and variables → Actions): ODDS_API_KEY (the 100K-plan key in
   nfl-td-predictor/.odds-key) and SYNC_TOKEN (a GitHub token with the gist scope). Without them a run logs a warning and
   exits 0. Manual run: Actions → Closing prices → Run workflow (mode dry = list only, no credits).
-- Cost: ~30 credits on a full NBA + NHL night (dry run 2026-11-04: 13 NBA + 3 NHL games with open bets), ~1,000/month.
+- Cost: live ~30 credits on a full NBA + NHL night (13 NBA + 3 NHL games with open bets), ~1,000/month — IF the timer
+  fired on time. Catch-up: ~150/night; dry run 2026-11-04 over 21 days back = 54 NHL + 70 NBA games, ~2,450 credits.
 - TESTED 2026-11-04: dry runs on the user's 43 real open background bets; a LIVE pull at a pretend 23:40Z for ATL@WSH +
   PHI@DET (3 credits, 92,154 left) filled 2 of 3 — the third was Maxey pts 22.5 at BetMGM, whose line had moved to 24.5
   (checked, 1 credit) -> why `moved` exists; a mocked Odds API (scratch mockfetch.mjs): exact, moved, "T. Maxey" initial
   match, not on the board, already started, reserve stop, a re-run spends 0, no secrets -> warning. The real gist calls
   were NOT exercised here (no token on this PC) — they are the apps' own endpoints (GET /gists, GET /gists/{id}, PATCH).
+- REAL RUN 2026-11-05 01:50Z (= Nov 4, 8:50 PM ET; manual, live): POR@PHX 1/1 closed at -9m (Jalen Green 3PM O1.5 BetMGM -125 -> -160, and
+  the NBA app copied it in on its next sync); TOR@DEN 0/1 (Braun pts at Fanatics — Fanatics posts few props to the API).
+  Catch-up tested on a mocked history API (scratch mockfetch2.mjs + mockgist3.mjs): live + catch-up in one run, settled /
+  push / closed / too old / moved / just started / traded player, re-run spends 0, cap pauses, dry estimates, days 0 = off.
+  One real history pull (ATL@WSH pra, 10 credits): snapshot 6.5 min before the real tip, FanDuel/DK/BetMGM/Fanatics all there.
 
 ## One site, one pot (2026-10-16, user: "combine all into one sim … make them like the nfl sim … one pot")
 - The NFL, NBA and NHL apps are separate repos on ONE site (popcawn.github.io), so they share one browser storage. Each
