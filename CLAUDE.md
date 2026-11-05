@@ -36,6 +36,11 @@ bet-log history). See README.md for the model and its backtest.
   model == market (Brier .1199/.1244) but the app's anytime rule (market EV>3% at best FD/DK) LOST 38% on 183 bets (CI
   below 0) -> GOAL_BETS=false: anytime goal is shown, tier 'nobet', never on the card. Every over −4%, under −8%, every
   anytime −8% (+100..+400 −2.6%). Two-way app-rule bets were rare (21) — the books barely disagree on NHL props.
+- CONSENSUS TEST (2026-11-05, user: "yes run the test and switch them"): "every book except the ones you'd bet" vs the
+  current "books that aren't yours" (often ONE book at a line) — a TIE, so NOT switched: 299 games, 9,073 sog+points lines,
+  Brier half 1 old .24229 vs new .24235, half 2 old .24036 vs new .24034 (calibrated: .24229/.24233, .24015/.24013).
+  Anytime goal yes-prices (never carded) were a hair better new (.11999/.12467 vs .12005/.12496) but the test skipped the
+  app's Yes/No two-way path, so left alone. Script: scratch nbanhl-test.mjs (same as the NBA repo's switch).
 - Shots / points: other books' de-vigged P(over) (`consAt`, nearest line within max(1,12%) moved by the model), model
   share from market_anchor.json (0), capped ±3 pts (`MODEL_CAP`).
 - Anytime goal (`player_goal_scorer_anytime`, yes-only): `yesScale()` = Σ model P(goal) / Σ other books' implied over the
