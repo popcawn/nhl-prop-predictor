@@ -306,7 +306,7 @@
             <div><b>Closing prices</b> <span class="muted">— Close fills itself, so the bet log's CLV works</span><br>
               <label title="while the app is open in the 15 minutes before puck drop, Close is filled from your book's live price — 1 credit per bet type per game"><input type="checkbox" id="autoCloseChk"> ⚡ closing lines before puck drop <span class="muted">(1 credit per bet type, app open)</span></label><br>
               <label title="for games you didn't have the app open for: after puck drop, Close comes from The Odds API's price history (your book 5 min before the start) — 10 credits per bet type per game"><input type="checkbox" id="autoHistChk"> + after puck drop from history <span class="muted">(10 credits per bet type per game)</span></label> <span id="histCost" class="muted"></span></div>
-            <div><label title="no bets on the card: every bet the app would make is logged to the background log and settled there — no money on them"><input type="checkbox" id="paperChk"> <b>🕶 Background only</b> <span class="muted">— track every bet the app would make, bet none (NHL is paused until the Nov 8 review)</span></label></div>
+            <div><label title="BetMGM bets go on the card (real money, half stakes); every other book's would-be bets are logged to the background log and settled there — no money on them"><input type="checkbox" id="paperChk"> <b>🕶 Background only</b> <span class="muted">— track every bet the app would make, bet none — except BetMGM: real money at half stakes since the Nov 8 review (untick = every book real, full stakes)</span></label></div>
             <div><b>Filters</b> <span class="muted">— bets that lost on last season's real prices. They're hidden but still priced, and tracked in the background (Log → ⚙ More)</span><br>
               <label title="the edge is at FanDuel and none of your other books has that price: -58% on 16 bets last season, down in both halves"><input type="checkbox" class="filtchk" value="fdOnly"> Skip edges only FanDuel has <span class="muted">(-58% on 16 bets)</span></label> <label title="an edge of 10% or more is usually news (a scratch, a goalie change) the price already knows: 0 for 3 last season"><input type="checkbox" class="filtchk" value="ev10"> Skip 10%+ EV <span class="muted">(0 for 3)</span></label></div>
             <div>Never pull below <input id="oddsReserve" type="number" min="0" step="10" style="width:70px;font-size:12px"> credits <span class="muted">(kept for your other apps on this key)</span></div>
@@ -758,6 +758,12 @@ let CANDS=[], CARD=[], ROOM=null;
 // real money until the ~Nov 8 review): the card bets nothing; every bet it would have shown (not already in your log) goes to
 // the background log as 'paper' and settles there. On by default; the switch is under odds settings
 let PAPER=lsJ('nhlp_paper', true)!==false, PAPERCARD=[];
+// 💵 REAL AT BETMGM (user, 2026-11-08: "its time to reassess the nhl sim" -> "yes"): background mode stays on for every book EXCEPT
+// these — their bets go on the card for real money at REAL_SCALE of the normal stake (half), under the bankroll limit. BetMGM passed
+// the review: 161 settled (real Oct 16-26 + background), 94-65-2, +14.7% flat, CLV +6.0%, beat the close 75%; Oct +15.5% / 91,
+// Nov 1-7 +13.6% / 70. DraftKings (-4.1% / 127, beat 58%) and FanDuel stay background. Full stakes at the Dec 1 review if November
+// holds. Only a pick whose BEST price is at a real book counts (the same-side de-dup is unchanged — that's the group that was tested).
+const REAL_BOOKS=['betmgm'], REAL_SCALE=0.5, isRealBk=b=>REAL_BOOKS.includes(b), realBkNames=()=>REAL_BOOKS.map(bookName).join(' / ');
 function buildCands(){
   const out=[]; PROJ.clear();
   for(const g of SLATE){ const board=BOARDS[g.game]; const proj=projFor(g); PROJ.set(g.game, proj); if(!board||g.state!=='pre') continue;
@@ -800,7 +806,11 @@ function buildCard(){
   for(const c of CANDS.filter(c=>c.tier==='take'&&!c.dup).sort((a,b)=>b.kelly-a.kelly)){ const pk=c.game+'|'+c.key+'|'+statOf(c.market);
     if(seen.has(pk)||SKIP[pk]) continue; seen.add(pk);
     picks.push(Object.assign({}, c, {stake:Math.max(0.1, Math.min(BET_CAP, Math.round(0.25*c.kelly*UNITS*10)/10)), held:held.has(pk)})); }
-  if(PAPER){ ROOM=null; CARD=[]; PAPERCARD=picks.filter(p=>!p.held); recordShadow(PAPERCARD); return; }
+  if(PAPER){ PAPERCARD=picks.filter(p=>!p.held&&!isRealBk(p.book)); recordShadow(PAPERCARD);
+    const real=picks.filter(p=>isRealBk(p.book)); for(const p of real) if(!p.held) p.stake=Math.max(0.1, Math.round(p.stake*REAL_SCALE*10)/10);
+    if(!real.length){ ROOM=null; CARD=[]; return; }
+    ROOM=fitRoom(real.filter(p=>!p.held), p=>roundUsd(p.stake*(unitUsd()||0)));
+    CARD=real.filter(p=>p.held||ROOM.fit.includes(p)); return; }
   PAPERCARD=[];
   ROOM=fitRoom(picks.filter(p=>!p.held), p=>roundUsd(p.stake*(unitUsd()||0)));
   CARD=picks.filter(p=>p.held||ROOM.fit.includes(p)); recordShadow();
@@ -860,7 +870,7 @@ function renderGame(){
   body.innerHTML=`<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(440px,100%),1fr));gap:16px">${col(g.away)}${col(g.home)}</div>`+
     (board?'':`<div class="muted" style="margin-top:8px;font-size:12px">No prices for this game yet — hit ⚡ on its chip (or Pull tonight).</div>`);
 }
-const verdictOf=c=>{ if(SKIP[skipKey(c)]) return '<span class="muted" title="you skipped it on the Bets tab — ↩ Bring back is under the bets">skipped</span>'; if(PAPER&&c.tier==='take') return '<span class="muted" title="background only — tracked in the background log, no money on it">🕶 tracked</span>'; const pick=CARD.find(p=>p.game===c.game&&p.key===c.key&&p.market===c.market); return pick?`<span class="vb vb-take">★ BET ${stakeTxt(pick.stake)}</span>`:ROOM&&ROOM.out.some(p=>p.game===c.game&&p.key===c.key&&p.market===c.market)?'<span class="vb vb-edge" title="a bet, but your bankroll is fully in play — it moves onto the card when settled bets free up room">💰 no room</span>':c.tier==='take'?'<span class="vb vb-edge" title="an edge, but this player\'s stat is already on the card or in your log (one bet per player per stat)">edge</span>':c.tier==='flag'?'<span class="vb vb-flag" title="an edge this big usually means news the price hasn\'t caught up with — check the lineup and the goalie">⚠ check</span>':c.tier==='filtered'?`<span class="muted" title="${esc('hidden by your filter ('+c.why.map(k=>FILTERS[k]).join(', ')+') — tracked in the background: Log → ⚙ More')}">🕶 filtered</span>`:c.tier==='model'?'<span class="muted">model only</span>':c.tier==='dart'?'<span class="muted" title="under a 6% chance — too rare to price reliably, never bet">🎲 long shot</span>':c.tier==='nobet'?'<span class="muted" title="on last season\'s real prices, betting the anytime-goal prices that looked best lost 38% (183 bets): a book out of line on a scorer usually knows something">not bet (tested)</span>':'<span class="muted">pass</span>'; };
+const verdictOf=c=>{ if(SKIP[skipKey(c)]) return '<span class="muted" title="you skipped it on the Bets tab — ↩ Bring back is under the bets">skipped</span>'; if(PAPER&&c.tier==='take'&&!isRealBk(c.book)) return '<span class="muted" title="background only — tracked in the background log, no money on it">🕶 tracked</span>'; const pick=CARD.find(p=>p.game===c.game&&p.key===c.key&&p.market===c.market); return pick?`<span class="vb vb-take">★ BET ${stakeTxt(pick.stake)}</span>`:ROOM&&ROOM.out.some(p=>p.game===c.game&&p.key===c.key&&p.market===c.market)?'<span class="vb vb-edge" title="a bet, but your bankroll is fully in play — it moves onto the card when settled bets free up room">💰 no room</span>':c.tier==='take'?'<span class="vb vb-edge" title="an edge, but this player\'s stat is already on the card or in your log (one bet per player per stat)">edge</span>':c.tier==='flag'?'<span class="vb vb-flag" title="an edge this big usually means news the price hasn\'t caught up with — check the lineup and the goalie">⚠ check</span>':c.tier==='filtered'?`<span class="muted" title="${esc('hidden by your filter ('+c.why.map(k=>FILTERS[k]).join(', ')+') — tracked in the background: Log → ⚙ More')}">🕶 filtered</span>`:c.tier==='model'?'<span class="muted">model only</span>':c.tier==='dart'?'<span class="muted" title="under a 6% chance — too rare to price reliably, never bet">🎲 long shot</span>':c.tier==='nobet'?'<span class="muted" title="on last season\'s real prices, betting the anytime-goal prices that looked best lost 38% (183 bets): a book out of line on a scorer usually knows something">not bet (tested)</span>':'<span class="muted">pass</span>'; };
 let BOARDROWS=[];
 function renderBoard(){
   const all=CANDS.filter(c=>!c.dup), showAll=$('boardAll').checked, ord=c=>CARD.some(p=>p.game===c.game&&p.key===c.key&&p.market===c.market)?0:c.tier==='take'?1:c.tier==='flag'?2:3;
@@ -902,10 +912,13 @@ function byBook(L){ const m=new Map(); for(const c of L){ const b=c.book||'fandu
   const o=b=>{ const i=BOOK_ORDER.indexOf(b); return i<0?99:i; }; return [...m].sort((x,y)=>o(x[0])-o(y[0])); }
 function renderCard(){
   const body=$('cardBody'), any=Object.keys(BOARDS).some(g=>gameOf(g));
-  if(PAPER){ const n=PAPERCARD.length, a=shadowAgg(SHADOW.filter(r=>(r.why||[]).includes('paper'))), done=a.w+a.l, pc=v=>(v>=0?'+':'')+(v*100).toFixed(1)+'%';
-    body.innerHTML=cardStat('done','🕶 BACKGROUND ONLY', any?`${n} would-be bet${n===1?'':'s'} tracked tonight — nothing to bet`:'pull tonight\'s prices to track the would-be bets')+
-      `<div class="muted" style="font-size:14px">NHL is paused for real money until the Nov 8 review. The app logs every bet it would have made and settles them itself — no money on them.${done?` So far <b>${a.w}-${a.l}${a.p?'-'+a.p:''}</b> · ROI <b class="${a.roi>0?'ev-pos':a.roi<0?'ev-neg':''}">${pc(a.roi)}</b>${a.clv!=null?` · CLV ${pc(a.clv)}`:''}.`:''} Details: Log → ⚙ More → 🕶 Background bets.</div>`; return; }
-  if(!CARD.length&&ROOM&&ROOM.out.length){ body.innerHTML=cardStat('done','💰 BANKROLL IN PLAY', `${ROOM.out.length} bet${ROOM.out.length>1?'s':''} wait${ROOM.out.length>1?'':'s'} for room`)+roomNote(ROOM)+skippedNote(); return; }
+  // background mode: bets at REAL_BOOKS use the normal card below (real money, half stakes); every other book's would-be bets
+  // are tracked — a one-line note under the card, or the full banner when there's no real bet tonight
+  const bgN=PAPERCARD.length, bgNote=PAPER?`<div class="muted" style="font-size:13px;margin-top:10px">🕶 ${bgN?`${bgN} would-be bet${bgN===1?'':'s'} at your other books tracked in the background — no money on ${bgN===1?'it':'them'}. `:''}Only ${realBkNames()} is real money (half stakes) since the Nov 8 review. Details: Log → ⚙ More → 🕶 Background bets.</div>`:'';
+  if(PAPER&&!CARD.length&&!(ROOM&&ROOM.out.length)){ const a=shadowAgg(SHADOW.filter(r=>(r.why||[]).includes('paper'))), done=a.w+a.l, pc=v=>(v>=0?'+':'')+(v*100).toFixed(1)+'%';
+    body.innerHTML=cardStat('done',`🕶 NO ${realBkNames().toUpperCase()} BETS TONIGHT`, any?`${bgN} would-be bet${bgN===1?'':'s'} at your other books tracked — nothing to bet`:'pull tonight\'s prices for the bets')+
+      `<div class="muted" style="font-size:14px">Since the Nov 8 review only ${realBkNames()} bets are real money, at half stakes. At your other books the app logs every bet it would have made and settles them itself — no money on them.${done?` Background so far <b>${a.w}-${a.l}${a.p?'-'+a.p:''}</b> · ROI <b class="${a.roi>0?'ev-pos':a.roi<0?'ev-neg':''}">${pc(a.roi)}</b>${a.clv!=null?` · CLV ${pc(a.clv)}`:''}.`:''} Details: Log → ⚙ More → 🕶 Background bets.</div>`+skippedNote(); return; }
+  if(!CARD.length&&ROOM&&ROOM.out.length){ body.innerHTML=cardStat('done','💰 BANKROLL IN PLAY', `${ROOM.out.length} bet${ROOM.out.length>1?'s':''} wait${ROOM.out.length>1?'':'s'} for room`)+roomNote(ROOM)+skippedNote()+bgNote; return; }
   if(!CARD.length){ const open=bets.filter(b=>b.result==='pending'&&gameOf(b.game)).length;
     body.innerHTML=any?(open?cardStat('done','✅ NO NEW BETS',`you have ${open} open bet${open>1?'s':''} tonight — nothing new clears the bar`):cardStat('none','NO BETS TONIGHT','nothing clears the bar'))+'<div class="muted" style="font-size:14px">Nothing at your books beats what the other books say it\'s worth by enough — that\'s the normal case.</div>'
       :'<div class="muted" style="font-size:14px">Pull tonight\'s prices and the best few bets across every game show up here, with stakes and links.</div>'; body.innerHTML+=skippedNote(); return; }
@@ -916,7 +929,7 @@ function renderCard(){
     `<div class="bacts"><button class="ss" id="cardLog">📓 Log ${un.length===CARD.length?'these '+un.length:'the '+un.length+' new'}</button></div>`:'')+
     byBook(un).map(([b,L])=>`<div class="bgame">${esc(bookName(b))} · ${L.length} bet${L.length>1?'s':''} · ${stakeTxt(L.reduce((a,c)=>a+c.stake,0))}${L.length>1?`<span class="bgo">${linkButtons(L, `Open all ${L.length} on`)}</span>`:''}</div>`+
     `<div class="bcards">`+L.map(c=>betCard({nw:true, tc:teamColor(c.abbr), name:(CARD.indexOf(c)?'':'★ ')+c.name, mkt:mktLabel(c.market), sub:`${esc(fmtGame(c.game))}${tipTime(c.game)?' · '+tipTime(c.game):''}`, odds:c.odds, book:c.book, stake:c.stake,
-      conf:confBadge(c.conf), mp:c.mp, bimp:c.bimp, ev:c.ev, link:linkButtons([c], 'Open on'), extra:skipBtn(c)+floorTxt(c)})).join('')+'</div>').join('')+roomNote(ROOM)+skippedNote();
+      conf:confBadge(c.conf), mp:c.mp, bimp:c.bimp, ev:c.ev, link:linkButtons([c], 'Open on'), extra:skipBtn(c)+floorTxt(c)})).join('')+'</div>').join('')+roomNote(ROOM)+skippedNote()+bgNote;
   const cl=$('cardLog'); if(cl) cl.onclick=()=>{ let n=0; for(const c of CARD) if(!c.held&&logBet(c, c.stake)) n++; if(n) saveBets(); };
 }
 // ---- bet log: one summary line, then days -> bets
@@ -977,7 +990,7 @@ const shadowAgg=L=>{ let w=0,l=0,p=0,open=0,net=0,usd=0,hasUsd=false,cs=0,cn=0; 
     if(c&&oddsDec(r.odds)){ cs+=d/c-1; cn++; } }
   return {n:L.length,w,l,p,open,net,roi:w+l?net/(w+l):null,usd:hasUsd&&w+l?usd:null,clv:cn?cs/cn:null,cn}; };
 const shadowTrend=(a,k)=>{ const n=a.w+a.l; return n<30?{t:`too early (${n} settled)`, c:'muted'}:a.roi>=0.03&&n>=100?{t:'📈 winning now — worth a re-test', c:'ev-pos', hot:true}:a.roi<=-0.03?{t:k==='paper'?'✓ still losing — pausing it saves you money':'✓ still losing — the filter is saving you money', c:''}:{t:'about break-even', c:'muted'}; };
-const WHY=Object.assign({paper:'Background mode — every would-be bet'}, FILTERS), whyOn=k=>k==='paper'?PAPER:!!FILT[k];
+const WHY=Object.assign({paper:'Background mode — would-be bets (all books until Nov 8, then every book but BetMGM)'}, FILTERS), whyOn=k=>k==='paper'?PAPER:!!FILT[k];
 function renderShadow(){ const el=$('shadowStats'), al=$('shadowAlert'); if(!el) return; const pc=v=>v==null?'—':(v>=0?'+':'')+(v*100).toFixed(1)+'%';
   const rows=Object.keys(WHY).map(k=>({k, a:shadowAgg(SHADOW.filter(r=>(r.why||[]).includes(k)))})).filter(x=>x.a.n);
   if(!rows.length){ el.innerHTML='<span class="muted">Nothing hidden yet — bets your filters hide show up here after a pull.</span>'; if(al) al.innerHTML=''; return; }
