@@ -260,6 +260,13 @@ bet-log history). See README.md for the model and its backtest.
 - One-time stake fix (2026-10-21, user: "a 2 bet at +100 wins $2 not 1.97"): bets logged before "logged as shown" are rounded to
   what the card showed (flag *_usdround; NFL only touches app-logged bets — book / legs / mktP / rawP / fun — never a hand-typed
   stake), stamped mt so Sync spreads it. The log's stake shows exactUsd(): the usual format for round amounts, else cents.
+- EXACT MONEY (2026-11-08, user: "yes fix nba and nhl too" — the NFL app's fix of 2026-11-07): fmtUsd's half-dollar steps
+  are for SUGGESTED stakes only. Balances, won/lost, riding, spent, could win, the unit, the sportsbook and background tables
+  and the pot chip use exactUsd (cents unless round, − for losses, thousands separators) — they hid up to 25¢ ("$3.75 still
+  riding" showed $4, "1 unit = $1.27" showed $1.50, background "−$1.28" showed "-$1.50"). Summed suggested stakes (the card's
+  "$X to bet", each book's total, "Tonight $X in all") = stakesTxt = the sum of each bet's own rounded dollars, so a total
+  matches its cards (3 × $1.50 = $4.50, not $4). exactUsd / stakesTxt are identical in all three apps — keep them so.
+  Tested on a throwaway copy with a window.__T hook (seeded pot + bets on one local origin, 0 credits).
 - BetMGM STAKES ARE TYPED BY THE USER (2026-10-26, final — user: "i dont want the average. i want each respective ... just
   open all with a click and i fill it in"). Every bet keeps its own stake on the card; BetMGM links carry NO stake (single or
   open-all), one "Open all N on BetMGM" per book group. History: 10-25 a stake in a multi-bet link filled ONE amount on every

@@ -525,30 +525,34 @@ function fitRoom(L, usdOf){ const B=bankNow(); if(B==null||BANK.lim===false) ret
   let left=B-ridingUsd(); const fit=[], out=[];
   for(const c of L.slice().sort((a,b)=>usdOf(b)-usdOf(a))){ const u=usdOf(c); if(u<=left+1e-9){ fit.push(c); left-=u; } else out.push(c); }
   return {fit, out, bank:B, left}; }
-const roomNote=R=>R&&R.out.length?`<div class="skipnote" title="the money on open bets across NFL, NBA and NHL never goes above your bankroll — biggest bets first; the rest wait until settled bets free up room">💰 ${fmtUsd(R.bank-R.left)} of your ${fmtUsd(R.bank)} bankroll in play · ${R.out.length} more bet${R.out.length>1?'s':''} wait${R.out.length>1?'':'s'} for room</div>`:'';
+const roomNote=R=>R&&R.out.length?`<div class="skipnote" title="the money on open bets across NFL, NBA and NHL never goes above your bankroll — biggest bets first; the rest wait until settled bets free up room">💰 ${exactUsd(R.bank-R.left)} of your ${exactUsd(R.bank)} bankroll in play · ${R.out.length} more bet${R.out.length>1?'s':''} wait${R.out.length>1?'':'s'} for room</div>`:'';
 // a stake in dollars exactly as the app shows it (whole $ from $20, half-dollars from $1, cents below) — what you actually bet,
 // so the log's P/L and "To win" match your book
 const roundUsd=x=>{ const a=Math.abs(x); return a>=20?Math.round(a):a>=1?Math.round(a*2)/2:Math.round(a*100)/100; };
 const fmtUsd=x=>{ const a=Math.abs(x); return (x<0?'−':'')+'$'+(a>=20?Math.round(a).toLocaleString():a>=1?(Math.round(a*2)/2).toFixed(Math.round(a*2)%2?2:0):a.toFixed(2)); };
 const stakeTxt=u=>{ const k=unitUsd(); return k!=null?fmtUsd(u*k):(Math.round(u*10)/10).toFixed(1)+'u'; };
-// a logged stake as it was bet: the usual $ format when it is a round amount, else to the cent (a hand-typed $2.37 stays $2.37)
-const exactUsd=x=>Math.abs(roundUsd(x)-x)<0.005 ? fmtUsd(x) : '$'+x.toFixed(2);
+// a logged stake as it was bet, and every balance / total / won-lost: the usual $ format when it is a round amount, else to the
+// cent (a hand-typed $2.37 stays $2.37). fmtUsd's half-dollar steps are for SUGGESTED stakes only — on totals they hid up to 25¢
+// (2026-11-08, the NFL app's fix of 11-07: "$3.50 riding" was $3.25). Same exactUsd / stakesTxt as the NFL app — keep them identical
+const exactUsd=x=>{ const a=Math.abs(x); return (x<0?'−':'')+(Math.abs(roundUsd(a)-a)<0.005 ? fmtUsd(a) : '$'+a.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2})); };
 const betStakeTxt=b=>BANK.amt&&betUsd(b)!=null?exactUsd(+betUsd(b)):b.stake+'u';
+// several suggested stakes together = the sum of the dollars each one shows (each is rounded on its own)
+const stakesTxt=L=>{ const k=unitUsd(); return k!=null ? exactUsd(L.reduce((a,c)=>a+roundUsd(c.stake*k),0)) : stakeTxt(L.reduce((a,c)=>a+c.stake,0)); };
 function renderBank(){ renderLimit(); const inp=$('bankUsd'), now=bankNow(); if(document.activeElement!==inp) inp.value=now!=null?Math.round(now*100)/100:'';
   if(now==null){ $('bankNow').textContent=''; renderPotChip(null,0); $('bankNote').textContent='Type what\'s in your betting account and every stake turns into dollars — one pot for NFL, NBA and NHL. It then grows or shrinks by itself as bets settle.'; return; }
   const AB=allBets(), done=AB.filter(b=>b.st>BANK.at&&betPl(b)!=null), d=now-BANK.amt, open=AB.filter(b=>b.result==='pending'), risk=open.reduce((a,b)=>a+(betUsd(b)||0),0);
-  const bySport=Object.keys(SPORT_LBL).map(k=>{ const L=done.filter(b=>b.sport===k); return L.length?`${SPORT_LBL[k]} ${(x=>(x>=0?'+':'')+fmtUsd(x))(L.reduce((a,b)=>a+betPl(b),0))}`:''; }).filter(Boolean).join(' · '); renderPotChip(now, open.length);
-  $('bankNow').innerHTML=done.length?`<b class="${d>0?'ev-pos':d<0?'ev-neg':''}">${d>=0?'+':''}${fmtUsd(d)}</b> <span class="muted">from ${done.length} settled bet${done.length>1?'s':''}${bySport?' — '+bySport:''}</span>`:'';
-  $('bankNote').innerHTML=`<b>One pot</b> for 🏈 🏀 🏒 — 1 unit = 1% = <b>${fmtUsd(unitUsd())}</b>.${open.length?` <b>${fmtUsd(risk)}</b> riding on ${open.length} open bet${open.length>1?'s':''}.`:''} Deposited or withdrew? Type the new balance.`; }
+  const bySport=Object.keys(SPORT_LBL).map(k=>{ const L=done.filter(b=>b.sport===k); return L.length?`${SPORT_LBL[k]} ${(x=>(x>=0?'+':'')+exactUsd(x))(L.reduce((a,b)=>a+betPl(b),0))}`:''; }).filter(Boolean).join(' · '); renderPotChip(now, open.length);
+  $('bankNow').innerHTML=done.length?`<b class="${d>0?'ev-pos':d<0?'ev-neg':''}">${d>=0?'+':''}${exactUsd(d)}</b> <span class="muted">from ${done.length} settled bet${done.length>1?'s':''}${bySport?' — '+bySport:''}</span>`:'';
+  $('bankNote').innerHTML=`<b>One pot</b> for 🏈 🏀 🏒 — 1 unit = 1% = <b>${exactUsd(unitUsd())}</b>.${open.length?` <b>${exactUsd(risk)}</b> riding on ${open.length} open bet${open.length>1?'s':''}.`:''} Deposited or withdrew? Type the new balance.`; }
 function renderPotChip(now){ const c=$('potChip'); if(!c) return; const AB=allBets(), open=AB.filter(b=>b.result==='pending').length, g=CUR;
   const onG=g?bets.filter(b=>b.game===g||(b.legs||[]).some(l=>l.game===g)):[], gUsd=onG.reduce((a,b)=>a+(betUsd(b)||0),0);   // this sport's bets on the game you have open
   const mon=(d=>{ d.setHours(0,0,0,0); d.setDate(d.getDate()-((d.getDay()+6)%7)); return d.getTime(); })(new Date());
   const W=AB.filter(b=>b.st>=mon&&['win','loss','push'].includes(b.result)), wpl=W.reduce((a,b)=>a+(betPl(b)||0),0);   // settled since Monday, every sport
   const st=(cls,lbl,v,tip)=>`<div class="stat ${cls}" title="${tip}"><small>${lbl}</small><b>${v}</b></div>`;
-  c.innerHTML=st('big','Bankroll', now!=null?fmtUsd(now):'<span class="muted">set it</span>', 'one pot for NFL, NBA and NHL')+
-    (now!=null&&W.length?st('','This week', `<span class="${wpl>0.004?'up':wpl<-0.004?'dn':''}">${wpl>=0?'+':''}${fmtUsd(wpl)}</span>`, 'won / lost on bets settled since Monday — every sport'):'')+
+  c.innerHTML=st('big','Bankroll', now!=null?exactUsd(now):'<span class="muted">set it</span>', 'one pot for NFL, NBA and NHL')+
+    (now!=null&&W.length?st('','This week', `<span class="${wpl>0.004?'up':wpl<-0.004?'dn':''}">${wpl>=0?'+':''}${exactUsd(wpl)}</span>`, 'won / lost on bets settled since Monday — every sport'):'')+
     st('','Bets', AB.length, 'every bet you\'ve logged — NFL, NBA and NHL')+st('','Open', open, 'bets still waiting on a result — every sport')+
-    (onG.length?st('','This game', fmtUsd(gUsd), 'staked on the game you have open'):'');
+    (onG.length?st('','This game', exactUsd(gUsd), 'staked on the game you have open'):'');
   try{ const sh=c.innerHTML.replace(/<div class="stat [^"]*" title="staked on the game you have open">[\s\S]*$/, ''); localStorage.setItem('sims_chip', sh); }catch(e){} }
 window.addEventListener('storage', e=>{ if(e.key==='nfltd_bank'){ BANK=Object.assign({amt:null, at:0, mt:0}, lsJ('nfltd_bank', {})); renderAll(); } else if(e.key&&e.key!=='nhlp_bets'&&Object.values(SPORT_BETS).includes(e.key)) renderBank(); });
 // ---------- ☁ SYNC — the NFL app's: same token and secret gist (one site, one browser storage), this app's own file in it,
@@ -923,11 +927,11 @@ function renderCard(){
     body.innerHTML=any?(open?cardStat('done','✅ NO NEW BETS',`you have ${open} open bet${open>1?'s':''} tonight — nothing new clears the bar`):cardStat('none','NO BETS TONIGHT','nothing clears the bar'))+'<div class="muted" style="font-size:14px">Nothing at your books beats what the other books say it\'s worth by enough — that\'s the normal case.</div>'
       :'<div class="muted" style="font-size:14px">Pull tonight\'s prices and the best few bets across every game show up here, with stakes and links.</div>'; body.innerHTML+=skippedNote(); return; }
   const tot=CARD.reduce((a,c)=>a+c.stake,0), un=CARD.filter(c=>!c.held), nIn=CARD.length-un.length;
-  body.innerHTML=(un.length?cardStat('new',`🆕 ${un.length} NEW BET${un.length>1?'S':''}`, `${stakeTxt(un.reduce((a,c)=>a+c.stake,0))} to bet${nIn?` · ${nIn} already logged`:''}`):cardStat('done','✅ NO NEW BETS',`${CARD.length>1?'all '+CARD.length+' bets on the card are':'the bet on the card is'} already in your log`))+
+  body.innerHTML=(un.length?cardStat('new',`🆕 ${un.length} NEW BET${un.length>1?'S':''}`, `${stakesTxt(un)} to bet${nIn?` · ${nIn} already logged`:''}`):cardStat('done','✅ NO NEW BETS',`${CARD.length>1?'all '+CARD.length+' bets on the card are':'the bet on the card is'} already in your log`))+
     // only new bets are drawn (user, 2026-10-21: "logged bets shouldnt be shown. Only new bets") — the log has the rest
-    (un.length?`<div class="muted" style="font-size:13px;margin:-2px 0 8px">${nIn?`Tonight ${stakeTxt(tot)} in all · `:''}${tot.toFixed(1)}% of bankroll · best bet first</div>`+
+    (un.length?`<div class="muted" style="font-size:13px;margin:-2px 0 8px">${nIn?`Tonight ${stakesTxt(CARD)} in all · `:''}${tot.toFixed(1)}% of bankroll · best bet first</div>`+
     `<div class="bacts"><button class="ss" id="cardLog">📓 Log ${un.length===CARD.length?'these '+un.length:'the '+un.length+' new'}</button></div>`:'')+
-    byBook(un).map(([b,L])=>`<div class="bgame">${esc(bookName(b))} · ${L.length} bet${L.length>1?'s':''} · ${stakeTxt(L.reduce((a,c)=>a+c.stake,0))}${L.length>1?`<span class="bgo">${linkButtons(L, `Open all ${L.length} on`)}</span>`:''}</div>`+
+    byBook(un).map(([b,L])=>`<div class="bgame">${esc(bookName(b))} · ${L.length} bet${L.length>1?'s':''} · ${stakesTxt(L)}${L.length>1?`<span class="bgo">${linkButtons(L, `Open all ${L.length} on`)}</span>`:''}</div>`+
     `<div class="bcards">`+L.map(c=>betCard({nw:true, tc:teamColor(c.abbr), name:(CARD.indexOf(c)?'':'★ ')+c.name, mkt:mktLabel(c.market), sub:`${esc(fmtGame(c.game))}${tipTime(c.game)?' · '+tipTime(c.game):''}`, odds:c.odds, book:c.book, stake:c.stake,
       conf:confBadge(c.conf), mp:c.mp, bimp:c.bimp, ev:c.ev, link:linkButtons([c], 'Open on'), extra:skipBtn(c)+floorTxt(c)})).join('')+'</div>').join('')+roomNote(ROOM)+skippedNote()+bgNote;
   const cl=$('cardLog'); if(cl) cl.onclick=()=>{ let n=0; for(const c of CARD) if(!c.held&&logBet(c, c.stake)) n++; if(n) saveBets(); };
@@ -937,14 +941,14 @@ const LOGOPEN=new Map();
 function renderBets(){
   const body=$('betBody'); renderBank(); renderShadow();
   if(!bets.length){ body.innerHTML='<div class="muted">No bets yet. Log picks from the card or the 📓 buttons — results and CLV fill themselves in.</div>'; return; }
-  const g=v=>v>0?'ev-pos':(v<0?'ev-neg':''), sgn=v=>(v>=0?'+':'')+v, pc=v=>sgn((v*100).toFixed(1))+'%', usdOn=!!BANK.amt, mny=v=>usdOn?(v>=0?'+':'')+fmtUsd(v):sgn(v.toFixed(2))+'u', amt=v=>usdOn?fmtUsd(v):v.toFixed(1)+'u', amtc=v=>usdOn?'$'+v.toFixed(2):v.toFixed(2)+'u';
+  const g=v=>v>0?'ev-pos':(v<0?'ev-neg':''), sgn=v=>(v>=0?'+':'')+v, pc=v=>sgn((v*100).toFixed(1))+'%', usdOn=!!BANK.amt, mny=v=>usdOn?(v>=0?'+':'')+exactUsd(v):sgn(v.toFixed(2))+'u', amt=v=>usdOn?exactUsd(v):v.toFixed(1)+'u', amtc=v=>usdOn?'$'+v.toFixed(2):v.toFixed(2)+'u';
   const cg=v=>v>0?'ev-pos':v<0?'clv-bad':'', plPill=v=>`<span class="plpill ${v>0.004?'pos':v<-0.004?'neg':'zero'}">${mny(v)}</span>`;   // red = worse than the close; the pill = money won / lost
   const amtAny=b=>usdOn?(betUsd(b)||0):(+b.stake||0), plAny=b=>{ const d=oddsDec(b.odds)||1, u=amtAny(b); return b.result==='win'?u*(d-1):b.result==='loss'?-u:b.result==='push'?0:null; };
   // which sportsbook has made the most — every sport's settled bets (one pot)
   const BK=(()=>{ const m=new Map(); for(const b of allBets()){ if(!['win','loss','push'].includes(b.result)) continue; const k=b.book||'fanduel', o=m.get(k)||m.set(k,{k,n:0,w:0,l:0,st:0,pl:0,cs:0,cn:0}).get(k);
       o.n++; if(b.result==='win') o.w++; if(b.result==='loss') o.l++; if(b.result!=='push') o.st+=amtAny(b); o.pl+=plAny(b)||0; const d1=oddsDec(b.odds), d2=oddsDec(b.closeOdds); if(d1&&d2){ o.cs+=d1/d2-1; o.cn++; } }
     return [...m.values()].sort((x,y)=>y.pl-x.pl); })();
-  const bkTable=BK.length?`<table class="bkstat pcards"><thead><tr><th class="l">Sportsbook</th><th>Bets</th><th>Record</th><th>Staked</th><th>Won / lost</th><th>ROI</th><th>CLV</th></tr></thead><tbody>${BK.map(o=>`<tr><td class="l"><b>${esc(bookName(o.k))}</b></td><td>${o.n}</td><td>${o.w}-${o.l}</td><td>${usdOn?fmtUsd(o.st):o.st.toFixed(1)+'u'}</td><td>${plPill(o.pl)}</td><td class="${o.st?(o.pl>0?'ev-pos':o.pl<0?'clv-bad':''):''}">${o.st?((o.pl/o.st>=0?'+':'')+(o.pl/o.st*100).toFixed(1)+'%'):'—'}</td><td class="${o.cn?cg(o.cs/o.cn):''}">${o.cn?((o.cs>=0?'+':'')+(o.cs/o.cn*100).toFixed(1)+'%'):'—'}</td></tr>`).join('')}</tbody></table>`:'<span class="muted">No settled bets yet.</span>';
+  const bkTable=BK.length?`<table class="bkstat pcards"><thead><tr><th class="l">Sportsbook</th><th>Bets</th><th>Record</th><th>Staked</th><th>Won / lost</th><th>ROI</th><th>CLV</th></tr></thead><tbody>${BK.map(o=>`<tr><td class="l"><b>${esc(bookName(o.k))}</b></td><td>${o.n}</td><td>${o.w}-${o.l}</td><td>${usdOn?exactUsd(o.st):o.st.toFixed(1)+'u'}</td><td>${plPill(o.pl)}</td><td class="${o.st?(o.pl>0?'ev-pos':o.pl<0?'clv-bad':''):''}">${o.st?((o.pl/o.st>=0?'+':'')+(o.pl/o.st*100).toFixed(1)+'%'):'—'}</td><td class="${o.cn?cg(o.cs/o.cn):''}">${o.cn?((o.cs>=0?'+':'')+(o.cs/o.cn*100).toFixed(1)+'%'):'—'}</td></tr>`).join('')}</tbody></table>`:'<span class="muted">No settled bets yet.</span>';
   const rows=bets.map(b=>{ const dec=oddsDec(b.odds), cd=oddsDec(b.closeOdds), nd=!cd&&b.cur&&b.cur.q?oddsDec(b.cur.q):null;
     return {b, clv:dec&&cd?dec/cd-1:null, live:dec&&nd?dec/nd-1:null, stk:usdOn?(betUsd(b)||0):(+b.stake||0), pl:betPl(b)}; });
   const agg=R=>{ let w=0,l=0,p=0,st=0,net=0,cs=0,cn=0,cp=0,open=0,spent=0,riding=0,towin=0; for(const r of R){ const x=r.b.result; spent+=r.stk; if(x==='win'||x==='loss'){ x==='win'?w++:l++; st+=r.stk; net+=r.pl||0; } else if(x==='push') p++; else { open++; riding+=r.stk; towin+=r.stk*((oddsDec(r.b.odds)||1)-1); } if(r.clv!=null){ cs+=r.clv; cn++; if(r.clv>0) cp++; } }
@@ -994,7 +998,7 @@ const WHY=Object.assign({paper:'Background mode — would-be bets (all books unt
 function renderShadow(){ const el=$('shadowStats'), al=$('shadowAlert'); if(!el) return; const pc=v=>v==null?'—':(v>=0?'+':'')+(v*100).toFixed(1)+'%';
   const rows=Object.keys(WHY).map(k=>({k, a:shadowAgg(SHADOW.filter(r=>(r.why||[]).includes(k)))})).filter(x=>x.a.n);
   if(!rows.length){ el.innerHTML='<span class="muted">Nothing hidden yet — bets your filters hide show up here after a pull.</span>'; if(al) al.innerHTML=''; return; }
-  const usdTxt=v=>v==null?'—':`<span class="${v>0?'ev-pos':v<0?'clv-bad':''}">${v>=0?'+':'-'}${fmtUsd(Math.abs(v))}</span>`;
+  const usdTxt=v=>v==null?'—':`<span class="${v>0?'ev-pos':v<0?'clv-bad':''}">${v>=0?'+':''}${exactUsd(v)}</span>`;
   el.innerHTML=`<table class="bkstat pcards"><thead><tr><th class="l">Kept off by</th><th>Bets</th><th>Record</th><th title="1 unit on each">ROI</th><th title="price taken vs the price in the last 30 min before the start">CLV</th><th title="won / lost at the stakes the card would have shown">At card stakes</th><th class="l">So far</th></tr></thead><tbody>`+
     rows.map(({k,a})=>{ const t=shadowTrend(a,k); return `<tr><td class="l"><b>${esc(WHY[k])}</b>${whyOn(k)?'':' <span class="muted">(off)</span>'}</td><td>${a.n}${a.open?` <span class="muted">· ${a.open} open</span>`:''}</td><td>${a.w}-${a.l}${a.p?'-'+a.p:''}</td><td class="${a.roi>0?'ev-pos':a.roi<0?'clv-bad':''}">${pc(a.roi)}</td><td class="${a.clv>0?'ev-pos':a.clv<0?'clv-bad':''}">${pc(a.clv)}${a.cn?` <span class="muted">(${a.cn})</span>`:''}</td><td>${usdTxt(a.usd)}</td><td class="l ${t.c}">${t.t}</td></tr>`; }).join('')+
     `</tbody></table><div class="muted" style="font-size:12px;margin-top:4px">These are never bet and never touch your bankroll. Want them back on the card? Untick background mode or the filter under odds settings.</div>`;
