@@ -554,7 +554,18 @@ function renderPotChip(now){ const c=$('potChip'); if(!c) return; const AB=allBe
     st('','Bets', AB.length, 'every bet you\'ve logged — NFL, NBA and NHL')+st('','Open', open, 'bets still waiting on a result — every sport')+
     (onG.length?st('','This game', exactUsd(gUsd), 'staked on the game you have open'):'');
   try{ const sh=c.innerHTML.replace(/<div class="stat [^"]*" title="staked on the game you have open">[\s\S]*$/, ''); localStorage.setItem('sims_chip', sh); }catch(e){} }
-window.addEventListener('storage', e=>{ if(e.key==='nfltd_bank'){ BANK=Object.assign({amt:null, at:0, mt:0}, lsJ('nfltd_bank', {})); renderAll(); } else if(e.key&&e.key!=='nhlp_bets'&&Object.values(SPORT_BETS).includes(e.key)) renderBank(); });
+window.addEventListener('storage', e=>{ if(e.key==='nfltd_bank'){ BANK=Object.assign({amt:null, at:0, mt:0}, lsJ('nfltd_bank', {})); renderAll(); } else if(e.key==='nhlp_bets') takeOtherWindow();
+  else if(e.key==='nhlp_shadow'){ try{ SHADOW=mergeShadow(SHADOW, lsJ('nhlp_shadow', [])||[]); }catch(err){} }
+  else if(e.key&&Object.values(SPORT_BETS).includes(e.key)) renderAll(); });
+// 🪟 OTHER TABS AND WINDOWS (2026-11-11 audit, the NFL app's fix): (1) a bet logged in another sport's tab only redrew the
+// bankroll box here, so the card kept bets that no longer fit the one pot — now the whole page is redrawn (the card is
+// re-fitted); (2) a second NHL window kept its own copy of the log and its next save wrote the log back WITHOUT the other
+// window's new bet — now that window's log is merged in (newest edit of a bet wins, deletions follow its tombstones — the
+// ☁ Sync merge). Nothing is written back here, so two windows can't ping-pong.
+function takeOtherWindow(){ let theirs; try{ theirs=JSON.parse(localStorage.getItem('nhlp_bets')||'[]'); }catch(e){ return; } if(!Array.isArray(theirs)) return;
+  const t=lsJ('nhlp_tomb', {})||{}; for(const [k,v] of Object.entries(t)) if(!(TOMB[k]>=v)) TOMB[k]=v;
+  const before=JSON.stringify(bets); bets=mergeRecs(bets, theirs).sort((x,y)=>String(y.ts).localeCompare(String(x.ts))); betSnap=snapOf(bets);
+  if(JSON.stringify(bets)!==before) renderAll(); }
 // ---------- ☁ SYNC — the NFL app's: same token and secret gist (one site, one browser storage), this app's own file in it,
 // so a bet logged on the phone shows on the PC. Records carry mt (newest edit wins); deletions are tombstones; the pot
 // (nfltd_bank) rides along and merges by its mt. Set up once in the NFL app's bet log (☁ Sync).
@@ -680,7 +691,7 @@ function parseBoard(j, g){
       if(isMine){ ((raw[key]=raw[key]||{})[bk.key]=raw[key][bk.key]||[]).push({line:q.line, O:{o:fmtAm(q.O.price), p:q.O.price, tk:tkOf(bk.key,q.O)}, U:q.U?{o:fmtAm(q.U.price), p:q.U.price, tk:tkOf(bk.key,q.U)}:null}); }
       else if(q.U){ const io=americanToProb(q.O.price), iu=americanToProb(q.U.price); ((consRaw[key]=consRaw[key]||{})[q.line]=consRaw[key][q.line]||[]).push(io/(io+iu)); }
       else if(yesOnly) (yesRaw[key]=yesRaw[key]||[]).push(americanToProb(q.O.price)); } }
-  for(const [key,o] of Object.entries(consRaw)){ board.cons[key]={}; for(const [l,xs] of Object.entries(o)) board.cons[key][l]=median(xs); }
+  board.consN={}; for(const [key,o] of Object.entries(consRaw)){ board.cons[key]={}; board.consN[key]={}; for(const [l,xs] of Object.entries(o)){ board.cons[key][l]=median(xs); board.consN[key][l]=xs.length; } }
   for(const [key,xs] of Object.entries(yesRaw)) board.yes[key]=median(xs);
   for(const [key,byBook] of Object.entries(raw)){
     board.mine[key]=Object.fromEntries(Object.entries(byBook).map(([b,arr])=>[b, arr.map(x=>({line:x.line, O:x.O.o, U:x.U?x.U.o:null}))]));
@@ -702,7 +713,7 @@ async function pullGame(g, markets){
 }
 // a pull updates the game's board, and every open bet on it: its book's current price at the bet's own line (live CLV)
 function applyBoard(g, board, partial){
-  if(partial&&BOARDS[g.game]){ const B=BOARDS[g.game]; for(const f of ['offers','cons','yes','mine']) Object.assign(B[f]=B[f]||{}, board[f]); B.t=Date.now(); if(board.ko) B.ko=board.ko; } else BOARDS[g.game]=board;
+  if(partial&&BOARDS[g.game]){ const B=BOARDS[g.game]; for(const f of ['offers','cons','consN','yes','mine']) Object.assign(B[f]=B[f]||{}, board[f]); B.ft=B.ft||B.t; B.t=Date.now(); if(board.ko) B.ko=board.ko; } else BOARDS[g.game]=board;
   for(const b of bets){ if(b.result!=='pending'||b.game!==g.game||!b.key) continue; const st=b.market.split('|')[1]; if(!Object.keys(board.mine).some(k=>k.startsWith(st+'|'))) continue;
     const v=closeView(b, board); if(v&&v.odds){ b.cur={q:v.odds, l:v.line, o:v.raw, t:Date.now()}; delete b.offBoard; } else if(!v){ b.offBoard='no longer offered'; delete b.cur; } }
   let shc=0; for(const r of SHADOW){ const k0=Date.parse(r.ko||0); if(r.result!=='pending'||r.game!==g.game||!(k0>Date.now())||k0-Date.now()>30*60e3) continue;
@@ -716,6 +727,7 @@ function closeView(b, board){ const [,s,side,l]=b.market.split('|'), arr=((board
   const a=b.pmu>0?propSides(b.pmu,s,+l):null, c=b.pmu>0?propSides(b.pmu,s,o.line):null, at=x=>side==='O'?x.over:x.under;
   return {odds:a&&c?probToAmerican(clamp(americanToProb(parseFloat(raw))+at(a)-at(c),0.02,0.98)):null, line:o.line, raw, est:true}; }
 async function pullAll(only){
+  try{ await Promise.all([loadInjuries(), loadSlate()]); }catch(e){}   // a pull prices tonight's games as they stand NOW (who is out, which have started)
   const msg=$('pullMsg'), games=SLATE.filter(g=>g.state==='pre'&&(!only||g.game===only)), mk=pickedMarkets();
   if(!oddsKey()){ msg.innerHTML=oddsWhy({status:'nokey'}); $('oddsCfg').open=true; return; }
   if(!games.length){ msg.textContent='no games left to start tonight'; return; } if(!mk.length){ msg.textContent='tick at least one market under odds settings'; return; }
@@ -738,6 +750,13 @@ const propW=s=>MA.props&&MA.props.byStat&&MA.props.byStat[s]!=null?MA.props.bySt
 const GOAL_W=0, GOAL_BETS=false;
 const MODEL_CAP=0.03;
 const blendP=(mkt,model,w)=>w?clamp(expit((1-w)*logit(clamp(mkt,0.003,0.995))+w*logit(clamp(model,0.003,0.995))), mkt-MODEL_CAP, mkt+MODEL_CAP):mkt;
+// 🔢 HOW MANY BOOKS MADE THE MARKET (2026-11-11 audit, N2 — logging only, nothing is decided on it yet): the consensus is the
+// books that AREN'T yours, and on 58% of last season's saved lines that was ONE book (no more accurate than your own book's
+// price in either half). Every bet and background bet now keeps nOth = that count at its line (nNear = it came from the
+// nearest line instead), so the Dec 1 review can split results by it. Same lookup as consAt.
+function consInfo(board, key, line){ const o=(board.consN||{})[key]; if(!o) return {}; if(o[line]!=null) return {nOth:o[line]};
+  const tol=Math.max(1, 0.12*line); let best=null; for(const k of Object.keys(o)){ const L2=+k; if(Math.abs(L2-line)<=tol&&(best==null||Math.abs(L2-line)<Math.abs(best-line))) best=L2; }
+  return best==null?{nOth:0}:{nOth:o[best], nNear:1}; }
 function consAt(board, key, s, line, mu){ const o=board.cons[key]; if(!o) return null; if(o[line]!=null) return o[line];
   const tol=Math.max(1, 0.12*line); let best=null; for(const k of Object.keys(o)){ const L2=+k; if(Math.abs(L2-line)<=tol&&(best==null||Math.abs(L2-line)<Math.abs(best-line))) best=L2; }
   if(best==null) return null; const a=propSides(mu,s,line), b=propSides(mu,s,best); return a&&b?clamp(o[best]+a.over-b.over,0.02,0.98):null; }
@@ -768,9 +787,20 @@ let PAPER=lsJ('nhlp_paper', true)!==false, PAPERCARD=[];
 // Nov 1-7 +13.6% / 70. DraftKings (-4.1% / 127, beat 58%) and FanDuel stay background. Full stakes at the Dec 1 review if November
 // holds. Only a pick whose BEST price is at a real book counts (the same-side de-dup is unchanged — that's the group that was tested).
 const REAL_BOOKS=['betmgm'], REAL_SCALE=0.5, isRealBk=b=>REAL_BOOKS.includes(b), realBkNames=()=>REAL_BOOKS.map(bookName).join(' / ');
+// ⏱ OLD PRICES MAKE NO BETS (2026-11-11 audit, S1): a board stayed good until 6 hours after the start, so prices pulled at
+// 1 PM still made "bets" at 6:50 PM — after a scratch had moved every line. A game's prices now count only for BOARD_NEAR
+// (20 min) once the start is within 3 hours, BOARD_FAR (90 min) before that, measured from the last FULL pull (a closing-price
+// pull refreshes only your open bets' markets). Older = no candidates, and a line above the card says to pull again.
+const BOARD_NEAR=20*60e3, BOARD_FAR=90*60e3; let STALE=[];
+const boardOld=(g, board)=>Date.now()-(board.ft||board.t||0) > (Date.parse(g.tip)-Date.now()<3*3600e3 ? BOARD_NEAR : BOARD_FAR);
+function staleNote(){ const body=$('cardBody'); if(!body) return; let el=$('staleNote');
+  if(!el){ el=document.createElement('div'); el.id='staleNote'; el.className='skipnote'; el.style.margin='0 0 10px'; body.parentNode.insertBefore(el, body); }
+  el.hidden=!STALE.length; if(STALE.length) el.innerHTML=`⏱ Prices for ${STALE.length===1?fmtGame(STALE[0]):STALE.length+' games'} are too old to bet from — ⚡ pull again for tonight's bets`; }
 function buildCands(){
-  const out=[]; PROJ.clear();
+  const out=[]; PROJ.clear(); STALE=[];
   for(const g of SLATE){ const board=BOARDS[g.game]; const proj=projFor(g); PROJ.set(g.game, proj); if(!board||g.state!=='pre') continue;
+    if(Date.parse(g.tip)<=Date.now()) continue;                // it has started, whatever the last slate read said
+    if(boardOld(g, board)){ STALE.push(g.game); continue; }    // prices too old to bet from: pull again
     const ks=yesScale(board, proj);
     for(const [k,offers] of Object.entries(board.offers)){ const i=k.indexOf('|'), s=k.slice(0,i), key=k.slice(i+1), r=proj.get(key); if(!r||r.thin||r.st==='OUT'||!M.stats[s]) continue; const mu=r.mu[s];
       for(const off of offers){ const ps=propSides(mu,s,off.line); if(!ps) continue;
@@ -781,7 +811,7 @@ function buildCands(){
           const mp=mkt!=null?blendP(mkt,model,s==='goal'?GOAL_W:propW(s)):model, bimp=1/dec, ev=mp*dec-1, edge=mp-bimp, conf=confOf(r,src);
           let tier=mkt==null?'model':mp<0.06?'dart':(edge>0.12||ev>1)?'flag':(ev>=0.03&&edge>=0.015)?'take':'pass';
           if(s==='goal'&&!GOAL_BETS&&tier==='take') tier='nobet';   // the NFL app's guards: under 6% is too rare to price; a huge gap is usually news or a stale price
-          out.push({game:g.game, evId:g.id, tip:g.tip, key, name:r.p.name, abbr:r.abbr, pos:r.p.pos, stat:s, side:sd, line:off.line, market:mktKey(s,sd,off.line), odds:o.o, book:o.tk.b, tk:o.tk, solo:!!o.solo,
+          out.push({game:g.game, evId:g.id, tip:g.tip, key, name:r.p.name, abbr:r.abbr, pos:r.p.pos, stat:s, side:sd, line:off.line, market:mktKey(s,sd,off.line), odds:o.o, book:o.tk.b, tk:o.tk, solo:!!o.solo, ...consInfo(board, k, off.line),
             mu, model, mkt, src, mp, bimp, ev, edge, conf, kelly:edge>0?conf.score*edge/(1-bimp):0, tier}); } } } }
   // a take a filter hides is still priced (and tracked in the background), never bet — and it gives way to the same side at another book
   for(const c of out){ if(c.tier!=='take') continue; const w=filtWhy(c); if(w.length){ c.tier='filtered'; c.why=w; } }
@@ -821,7 +851,7 @@ function buildCard(){
 }
 function recordShadow(paper){ const have=new Set(SHADOW.map(r=>r.id)), k=unitUsd(); let n=0;
   const add=(c, why, stake)=>{ const id='sh|'+c.game+'|'+c.key+'|'+c.stat; if(have.has(id)) return; have.add(id);
-    SHADOW.push({id, ts:new Date().toISOString(), ko:c.tip, ev:c.evId, game:c.game, key:c.key, player:c.name, market:c.market, odds:c.odds, book:c.book, mp:+c.mp.toFixed(4), evp:+c.ev.toFixed(4), why, stake, ...(k!=null?{usd:roundUsd(stake*k)}:{}), result:'pending'}); n++; };
+    SHADOW.push({id, ts:new Date().toISOString(), ko:c.tip, ev:c.evId, game:c.game, key:c.key, player:c.name, market:c.market, odds:c.odds, book:c.book, mp:+c.mp.toFixed(4), evp:+c.ev.toFixed(4), ...(c.nOth!=null?{nOth:c.nOth, ...(c.nNear?{nNear:1}:{})}:{}), why, stake, ...(k!=null?{usd:roundUsd(stake*k)}:{}), result:'pending'}); n++; };
   for(const c of CANDS.filter(c=>c.tier==='filtered'&&!c.dup).sort((a,b)=>b.kelly-a.kelly)) add(c, c.why, Math.max(0.1, Math.min(BET_CAP, Math.round(0.25*c.kelly*UNITS*10)/10)));
   for(const c of (paper||[])) add(c, ['paper'], c.stake);
   if(n){ if(SHADOW.length>5000) SHADOW=SHADOW.slice(-5000); saveShadow(); syncSoon(); } }
@@ -840,7 +870,7 @@ function undoLog(){ if(!UNDO) return; const ids=new Set(UNDO), n0=bets.length; b
 // one bet per player per stat: a second bet on the same player's stat (any line, either side) is refused
 function logBet(c, stake){ if(bets.some(b=>b.result==='pending'&&b.game===c.game&&b.key===c.key&&statOf(b.market)===statOf(c.market))) return false; const k=unitUsd();
   bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*1e6), ts:new Date().toISOString(), ko:c.tip, ev:c.evId, game:c.game, key:c.key, player:c.name, market:c.market, odds:c.odds, book:c.book,
-    modelProb:+c.mp.toFixed(4), rawP:+c.model.toFixed(4), ...(c.mkt!=null?{mktP:+c.mkt.toFixed(4)}:{}), pmu:+c.mu.toFixed(3), stake:+(+stake).toFixed(1), ...(k!=null?{usd:roundUsd(stake*k)}:{}), closeOdds:'', result:'pending'}); noteLogged(bets[0].id);
+    modelProb:+c.mp.toFixed(4), rawP:+c.model.toFixed(4), ...(c.mkt!=null?{mktP:+c.mkt.toFixed(4)}:{}), pmu:+c.mu.toFixed(3), ...(c.nOth!=null?{nOth:c.nOth, ...(c.nNear?{nNear:1}:{})}:{}), stake:+(+stake).toFixed(1), ...(k!=null?{usd:roundUsd(stake*k)}:{}), closeOdds:'', result:'pending'}); noteLogged(bets[0].id);
   return true; }
 
 // ---------------------------------------------------------------- rendering
@@ -934,7 +964,7 @@ function renderCard(){
     byBook(un).map(([b,L])=>`<div class="bgame">${esc(bookName(b))} · ${L.length} bet${L.length>1?'s':''} · ${stakesTxt(L)}${L.length>1?`<span class="bgo">${linkButtons(L, `Open all ${L.length} on`)}</span>`:''}</div>`+
     `<div class="bcards">`+L.map(c=>betCard({nw:true, tc:teamColor(c.abbr), name:(CARD.indexOf(c)?'':'★ ')+c.name, mkt:mktLabel(c.market), sub:`${esc(fmtGame(c.game))}${tipTime(c.game)?' · '+tipTime(c.game):''}`, odds:c.odds, book:c.book, stake:c.stake,
       conf:confBadge(c.conf), mp:c.mp, bimp:c.bimp, ev:c.ev, link:linkButtons([c], 'Open on'), extra:skipBtn(c)+floorTxt(c)})).join('')+'</div>').join('')+roomNote(ROOM)+skippedNote()+bgNote;
-  const cl=$('cardLog'); if(cl) cl.onclick=()=>{ let n=0; for(const c of CARD) if(!c.held&&logBet(c, c.stake)) n++; if(n) saveBets(); };
+  const cl=$('cardLog'); if(cl) cl.onclick=()=>{ const ok=fitRoom(CARD.filter(c=>!c.held), p=>roundUsd(p.stake*(unitUsd()||0))).fit; let n=0; for(const c of ok) if(logBet(c, c.stake)) n++; if(n) saveBets(); else renderAll(); };   // the room is checked again at the click
 }
 // ---- bet log: one summary line, then days -> bets
 const LOGOPEN=new Map();
@@ -1004,7 +1034,7 @@ function renderShadow(){ const el=$('shadowStats'), al=$('shadowAlert'); if(!el)
     `</tbody></table><div class="muted" style="font-size:12px;margin-top:4px">These are never bet and never touch your bankroll. Want them back on the card? Untick background mode or the filter under odds settings.</div>`;
   labelCells(el); const hot=rows.filter(x=>shadowTrend(x.a,x.k).hot&&whyOn(x.k));
   if(al) al.innerHTML=hot.length?`<div style="margin:0 0 10px;padding:8px 10px;border-radius:8px;border:1px solid var(--good);font-size:13px">📈 ${hot.map(({k,a})=>`${k==='paper'?'Your background bets':'Bets the <b>'+esc(FILTERS[k])+'</b> filter hid'} are up <b>${pc(a.roi)}</b> over ${a.w+a.l} settled`).join(' · ')} — worth a re-test (details: ⚙ More).</div>`:''; }
-function renderAll(){ buildCands(); buildCard(); renderSlate(); renderGame(); renderBoard(); renderCard(); renderBets(); oddsStatus(); showHistCost(); }
+function renderAll(){ buildCands(); buildCard(); renderSlate(); renderGame(); renderBoard(); renderCard(); staleNote(); renderBets(); oddsStatus(); showHistCost(); }
 
 // ---------------------------------------------------------------- auto-settle (ESPN box scores) and closing prices
 let AUTO_NOTE='', autoBusy=false;
@@ -1012,13 +1042,18 @@ let AUTO_NOTE='', autoBusy=false;
 // box score has already decided is settled — an over past its line wins, its under loses (shots, goals and points only count
 // up). It keeps mid:1 until the final box score checks it again (a stat correction can flip it); a result set by hand drops
 // mid. Everything else (a scratch, an over not there yet, an under still alive) waits for the final, as before
+// ⏱ TWO LOOKS (2026-11-11 audit, S2 — the NFL app's rule): a mid-game result settles only when a later check, at least
+// MID_CONFIRM_MS after the first, still says the same (b.midSeen = when it was first seen). A basket, rebound, assist, shot
+// or goal can be taken back (a stat correction, a goal wiped out on review): one look could settle a win that is gone a
+// minute later, and the pot grew and room opened until the final.
+const MID_CONFIRM_MS=4*60e3;
 async function autoSettle(manual){
   if(autoBusy) return; const due=b=>b.ev&&b.key&&(b.result==='pending'?Date.now()>Date.parse(b.ko||0):!!b.mid), pend=bets.filter(due).concat(SHADOW.filter(due));
   if(!pend.length){ if(manual){ $('autoMsg').textContent='🤖 no open bet\'s game has started yet'; } return; }
-  autoBusy=true; let settled=0, hand=0, mid=0, fixed=0, ch=0, shCh=0; const cache=new Map();
+  autoBusy=true; let settled=0, hand=0, mid=0, fixed=0, ch=0, shCh=0, seenN=0; const cache=new Map();
   try{ for(const b of pend){ let sum=cache.get(b.ev); if(sum===undefined){ try{ sum=await (await fetch(SUM+b.ev)).json(); }catch(e){ sum=null; } cache.set(b.ev, sum); }
       const t=((((sum&&sum.header&&sum.header.competitions)||[])[0]||{}).status||{}).type||{}, fin=!!t.completed, sh=String(b.id).startsWith('sh|');
-      if(!fin&&(t.state!=='in'||b.result!=='pending')) continue;
+      if(!fin&&(t.state!=='in'||b.result!=='pending')) continue; if(fin&&b.midSeen) delete b.midSeen;
       const id=b.key.split('|')[1]; let row=null, K=null; for(const tb of ((sum.boxscore&&sum.boxscore.players)||[])) for(const st of (tb.statistics||[])){ const a=(st.athletes||[]).find(x=>String(x.athlete.id)===id); if(a){ row=a; K=st.keys||[]; } }
       const played=!!row&&(row.stats||[]).length>0;
       if(!fin&&!played) continue;
@@ -1026,14 +1061,17 @@ async function autoSettle(manual){
       if(!played){ b.result='push'; b.auto='not in the box score (scratched) — void'; b.st=Date.now(); delete b.autoNote; sh?shCh++:settled++; continue; }
       const num=n=>{ const v=parseFloat(row.stats[K.indexOf(n)]); return isNaN(v)?0:v; }, [,s,side,line]=b.market.split('|');
       const v=s==='sog'?num('shotsTotal'):s==='goal'?num('goals'):s==='pts'?num('goals')+num('assists'):null; if(v==null){ if(fin&&!sh) hand++; continue; }
-      if(!fin){ if(!(v>+line)) continue; b.result=side==='O'?'win':'loss'; b.mid=1; b.auto=`${SHORT[s]} ${v} mid-game`; b.st=Date.now(); delete b.autoNote; if(sh) shCh++; else { settled++; mid++; } continue; }
+      if(!fin){ if(!(v>+line)){ if(b.midSeen){ delete b.midSeen; sh?shCh++:ch++; } continue; }
+        if(!b.midSeen){ b.midSeen=Date.now(); sh?shCh++:ch++; if(!sh) seenN++; continue; }
+        if(Date.now()-b.midSeen<MID_CONFIRM_MS){ if(!sh) seenN++; continue; }
+        delete b.midSeen; b.result=side==='O'?'win':'loss'; b.mid=1; b.auto=`${SHORT[s]} ${v} mid-game`; b.st=Date.now(); delete b.autoNote; if(sh) shCh++; else { settled++; mid++; } continue; }
       const r=v===+line?'push':((v>+line)===(side==='O')?'win':'loss'); b.auto=`${SHORT[s]} ${v}`;
       if(b.mid){ delete b.mid; if(r!==b.result){ b.result=r; b.st=Date.now(); if(!sh) fixed++; } sh?shCh++:ch++; continue; }
       b.result=r; b.st=Date.now(); delete b.autoNote; sh?shCh++:settled++; }
     for(const r of pend) if(String(r.id).startsWith('sh|')&&r.result==='pending'&&r.autoNote&&Date.now()>Date.parse(r.ko||0)+36*3600e3){ r.result='push'; r.auto='not in the box score — void'; r.st=Date.now(); shCh++; }
     if(pend.some(b=>String(b.id).startsWith('sh|'))) saveShadow();
     if(settled||hand||ch) saveBets(); else if(shCh){ renderAll(); syncSoon(); }
-    AUTO_NOTE=[settled?`🤖 settled <b>${settled}</b> bet${settled>1?'s':''} ${mid===settled?'mid-game — already decided, checked again at the final':`from ESPN's box scores${mid?` (${mid} mid-game — already decided, checked again at the final)`:''}`}`:'', fixed?`<span style="color:var(--warn)">${fixed} mid-game result${fixed>1?'s':''} changed at the final</span>`:'', hand?`<span style="color:var(--warn)">${hand} to settle by hand (✋)</span>`:''].filter(Boolean).join(' · ')||(manual?'🤖 nothing decided yet':AUTO_NOTE);
+    AUTO_NOTE=[settled?`🤖 settled <b>${settled}</b> bet${settled>1?'s':''} ${mid===settled?'mid-game — already decided, checked again at the final':`from ESPN's box scores${mid?` (${mid} mid-game — already decided, checked again at the final)`:''}`}`:'', fixed?`<span style="color:var(--warn)">${fixed} mid-game result${fixed>1?'s':''} changed at the final</span>`:'', seenN?`⏱ ${seenN} bet${seenN>1?'s':''} decided mid-game — settled once the next check agrees`:'', hand?`<span style="color:var(--warn)">${hand} to settle by hand (✋)</span>`:''].filter(Boolean).join(' · ')||(manual?'🤖 nothing decided yet':AUTO_NOTE);
     $('autoMsg').innerHTML=AUTO_NOTE;
   }finally{ autoBusy=false; }
 }
@@ -1181,6 +1219,12 @@ if(!lsJ('nhlp_usdround', false)){ const now=Date.now(); let n=0;
 renderTest(); renderAll(); loadSlate(); loadInjuries(); syncNote();
 opened().then(()=>setTimeout(()=>syncNow(), 2000)); setInterval(()=>{ if(!document.prerendering) syncNow(); }, 5*60e3); window.addEventListener('focus', ()=>syncSoon(500));
 opened().then(()=>setTimeout(()=>autoSettle(false), 4000)); setInterval(()=>{ if(!document.prerendering) autoSettle(false); }, 10*60e3);
+// 🔄 FRESH SLATE + INJURIES (2026-11-11 audit, S1): both were read once when the page opened, so a tab left open all afternoon
+// still had the morning's injury list and showed a started game as "not started". Now: with every pull, every 5 minutes
+// while the page is showing (not while you are typing in a box), and when you come back to the tab.
+const refreshNight=()=>{ if(document.prerendering||document.hidden) return; loadInjuries(); loadSlate(); };
+setInterval(()=>{ if(!/^(INPUT|SELECT|TEXTAREA)$/.test((document.activeElement||{}).tagName||'')) refreshNight(); }, 5*60e3);
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') refreshNight(); });
 // closing prices: checked every 2 min and when the tab comes back (phones pause timers); the first check waits for the sync
 opened().then(()=>setTimeout(autoCloses, 8000)); setInterval(()=>{ if(!document.prerendering) autoCloses(); }, 2*60e3);
 document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') autoCloses(); });

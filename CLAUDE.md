@@ -281,3 +281,31 @@ bet-log history). See README.md for the model and its backtest.
 - Bets FanDuel + DraftKings (+ BetMGM), wants "what do I bet and how much, in dollars", gets overwhelmed — keep the card
   short. Be honest that an edge means "out of line with the other books". Commits end with the Co-Authored-By line from
   the session's instructions.
+
+## Audit fixes 2026-11-11 (user: "fix N1, S1 and S2 and add the N2 logging"; the NFL app was not touched)
+- 🪟 N1 OTHER TABS / WINDOWS: the `storage` listener redraws the whole page (renderAll -> the card is re-fitted) when another
+  sport's bets change — it only redrew the bankroll box; a second NHL window's log is merged in (takeOtherWindow -> mergeRecs
+  + its tombstones from nhlp_tomb; nhlp_shadow via mergeShadow) instead of being saved over. Nothing is written back there.
+  "📓 Log these" re-checks fitRoom at the click. ANY NEW STORAGE KEY THAT MOVES THE POT MUST END IN renderAll THERE.
+- 🔄 S1 FRESH SLATE + INJURIES: loadInjuries() + loadSlate() ran once per page load. Now also at the start of every pullAll,
+  every 5 min while the page shows (refreshNight; skipped while a box has focus) and on coming back to the tab.
+- ⏱ S1 OLD PRICES MAKE NO BETS: buildCands skips a game that has started (tip passed, whatever the slate said) and a board
+  older than BOARD_NEAR (20 min, start within 3 h) / BOARD_FAR (90 min) — boardOld(), measured from the last FULL pull
+  (applyBoard keeps board.ft when a closing-price pull refreshes only some markets). Skipped games go to STALE and
+  staleNote() shows "⏱ Prices for … are too old to bet from — ⚡ pull again" above the card. Background bets are recorded at
+  pull time, so the background log is unaffected.
+- ⏱ S2 TWO LOOKS: a mid-game result settles only when a later check, >= MID_CONFIRM_MS (4 min) after the first, agrees
+  (b.midSeen = time first seen, on bets and background bets); a stat that drops back under the line clears it; the final
+  clears it. Note line "⏱ N bets decided mid-game — settled once the next check agrees".
+- 🔢 N2 LOGGING (NHL only; nothing is decided on it yet): parseBoard keeps board.consN[stat|key][line] = how many outside
+  books made the consensus; consInfo() (consAt's lookup) puts nOth on every candidate (nNear = taken from the nearest
+  line), and logBet / recordShadow store it on the bet. Why: the consensus is the books that AREN'T yours and on 58% of
+  last season's saved lines (5,251 of 9,044) that was ONE book, no more accurate than the user's own book's price in
+  either half (Brier .2409 vs .2410, .2364 vs .2364) — but BetMGM's live record under this rule is good (+14.7%, CLV +6%),
+  so it was NOT switched. AT THE DEC 1 REVIEW split BetMGM's results by nOth (1 vs 2+) before changing the rule.
+- Tested 2026-11-11 in a local copy (sims-all server, fake Odds API + fake ESPN summary, 0 credits): a pull fetched injuries
+  + scoreboard once each; a 100-min-old board -> no bets + the note, pull again -> bets back; an NFL bet from another tab
+  cut the card to what still fit; a second window's logged bets appeared and survived this window's next save; mid-game:
+  seen once -> pending, taken back -> pending again, confirmed 5 min later -> win, final re-checked.
+- NOT done (offered in the audit): sync follow-up after a write (NFL fix 9), per-player stake cap, closes-bot timer, dressed-
+  but-0-TOI void (NHL), push-line EV.
