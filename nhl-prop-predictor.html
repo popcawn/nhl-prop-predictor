@@ -580,7 +580,7 @@ function applyBotCloses(c){ const C=(c&&c.closes)||{}; let sh=0, bt=0;
   for(const r of SHADOW) if(!r.closeOdds&&C[r.id]){ r.closeOdds=C[r.id].o; sh++; }
   for(const b of bets) if(!b.closeOdds&&C[b.id]){ b.closeOdds=C[b.id].o; b.closeSrc='bot'; bt++; }
   if(sh) saveShadow(); if(bt){ stampChanges(); lsW('nhlp_bets', bets); } if(sh||bt) renderAll(); return sh+bt; }
-let TOMB=lsJ('nhlp_tomb', {})||{}, SYNC_ERR=null, SYNC_OK=0, syncBusy=false, syncAgain=false, syncTimer=null;
+let TOMB=lsJ('nhlp_tomb', {})||{}, SYNC_ERR=null, SYNC_OK=0, syncBusy=false, syncAgain=false, syncTimer=null, followTimer=null;
 const recBody=r=>{ const {mt, ...rest}=r; return JSON.stringify(rest); }, snapOf=L=>new Map(L.map(r=>[r.id, recBody(r)]));
 let betSnap=snapOf(bets);
 function stampChanges(){ const now=Date.now(), seen=new Set(); for(const r of bets){ seen.add(r.id); if(betSnap.get(r.id)!==recBody(r)) r.mt=now; delete TOMB[r.id]; } for(const k of betSnap.keys()) if(!seen.has(k)) TOMB[k]=now; betSnap=snapOf(bets); lsW('nhlp_tomb', TOMB); }
@@ -596,7 +596,10 @@ async function gh(p, opt){ opt=opt||{}; const r=await fetch(GH+p, {method:opt.me
 function syncSoon(ms){ if(!syncCfg().token) return; clearTimeout(syncTimer); syncTimer=setTimeout(syncNow, ms==null?2500:ms); }
 function syncNote(){ const el=$('syncNote'); if(!el) return; const C=syncCfg();
   el.innerHTML=!C.token?'<a href="../nfl-td-predictor/nfl-td-predictor.html" title="☁ Sync keeps your bets the same on every device — set it up once in the NFL app\'s bet log; it covers all three sports">☁ Sync: set up in 🏈 NFL</a>':SYNC_ERR?`<span style="color:var(--warn)">☁ ${esc(SYNC_ERR)}</span>`:SYNC_OK?`☁ synced ${new Date(SYNC_OK).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}`:'☁ Sync on'; }
-async function syncNow(){ const C=syncCfg(); if(!C.token){ syncNote(); return; } if(syncBusy){ syncAgain=true; return; } syncBusy=true;
+// S3 (2026-11-11 audit, the NFL app's fix 9): the sync is read -> merge -> write with no version check, so two devices
+// writing in the same second leave the gist without one device's newest bet until that device syncs again. After a write
+// this page syncs ONCE more, 8 s later (follow === true never chains, so two devices can't ping-pong).
+async function syncNow(follow){ const C=syncCfg(); if(!C.token){ syncNote(); return; } if(syncBusy){ syncAgain=true; return; } syncBusy=true; let wrote=false;
   try{ let gid=C.gistId;
     if(!gid){ for(let page=1; page<=5&&!gid; page++){ const list=await gh(`/gists?per_page=100&page=${page}`); const hit=list.find(x=>x.files&&(x.files['nfl-td-sync.json']||x.files[SYNC_FILE])); if(hit) gid=hit.id; if(list.length<100) break; }
       if(!gid){ SYNC_ERR='open the NFL app once to start sync'; return; } }
@@ -609,10 +612,10 @@ async function syncNow(){ const C=syncCfg(); if(!C.token){ syncNote(); return; }
       betSnap=snapOf(bets); lsW('nhlp_bets', bets); lsW('nhlp_tomb', TOMB); if(JSON.stringify(bets)!==before) renderAll(); }
     applyBotCloses(await gistJson(gist, CLOSES_FILE));
     const mine={app:'nhl-prop-predictor', v:1, at:new Date().toISOString(), bets, tomb:TOMB, bank:BANK, shadow:SHADOW}, canon=p=>JSON.stringify([p.bets, p.tomb, p.bank||null, p.shadow||[]]);
-    if(!remote||canon(mine)!==canon(remote)) await gh('/gists/'+gid, {method:'PATCH', body:JSON.stringify({files:{[SYNC_FILE]:{content:JSON.stringify(mine)}}})});
+    if(!remote||canon(mine)!==canon(remote)){ await gh('/gists/'+gid, {method:'PATCH', body:JSON.stringify({files:{[SYNC_FILE]:{content:JSON.stringify(mine)}}})}); wrote=true; }
     SYNC_OK=Date.now(); SYNC_ERR=null;
   }catch(e){ SYNC_ERR=e.status===401?'token rejected — reconnect ☁ Sync in the NFL app':(e.status===403||e.status===404)?'GitHub refused — check ☁ Sync in the NFL app':'offline — will retry'; }
-  finally{ syncBusy=false; syncNote(); if(syncAgain){ syncAgain=false; syncSoon(400); } } }
+  finally{ syncBusy=false; syncNote(); if(syncAgain){ syncAgain=false; syncSoon(400); } else if(wrote&&follow!==true){ clearTimeout(followTimer); followTimer=setTimeout(()=>syncNow(true), 8000); } } }
 function saveBets(){ stampChanges(); lsW('nhlp_bets', bets); renderAll(); syncSoon(); }
 
 // ---------------------------------------------------------------- odds: your books, tickets, links, the other books
@@ -840,6 +843,12 @@ function buildCard(){
   for(const c of CANDS.filter(c=>c.tier==='take'&&!c.dup).sort((a,b)=>b.kelly-a.kelly)){ const pk=c.game+'|'+c.key+'|'+statOf(c.market);
     if(seen.has(pk)||SKIP[pk]) continue; seen.add(pk);
     picks.push(Object.assign({}, c, {stake:Math.max(0.1, Math.min(BET_CAP, Math.round(0.25*c.kelly*UNITS*10)/10)), held:held.has(pk)})); }
+  // 👤 ONE PLAYER, ONE BET'S WORTH (2026-11-11 audit, S4; user: "fix S4"): every take still shows, but a player's bets in one
+  // game (points + rebounds + assists; shots + points) ride on the same night from him, so together they get at most
+  // BET_CAP — best bet first, counting what is already in your log on him. A bet left with under 0.1u is dropped.
+  { const used=new Map(); for(const b of bets) if(b.result==='pending'&&b.key){ const k=b.game+'|'+b.key; used.set(k, (used.get(k)||0)+(+b.stake||0)); }
+    for(const p of picks){ if(p.held) continue; const k=p.game+'|'+p.key, u=used.get(k)||0, s=Math.round(Math.max(0, Math.min(p.stake, BET_CAP-u))*10)/10; if(s<p.stake) p.capped=true; p.stake=s; used.set(k, u+s); }
+    for(let i=picks.length-1;i>=0;i--) if(!picks[i].held&&picks[i].stake<0.1) picks.splice(i,1); }
   if(PAPER){ PAPERCARD=picks.filter(p=>!p.held&&!isRealBk(p.book)); recordShadow(PAPERCARD);
     const real=picks.filter(p=>isRealBk(p.book)); for(const p of real) if(!p.held) p.stake=Math.max(0.1, Math.round(p.stake*REAL_SCALE*10)/10);
     if(!real.length){ ROOM=null; CARD=[]; return; }
@@ -1055,10 +1064,12 @@ async function autoSettle(manual){
       const t=((((sum&&sum.header&&sum.header.competitions)||[])[0]||{}).status||{}).type||{}, fin=!!t.completed, sh=String(b.id).startsWith('sh|');
       if(!fin&&(t.state!=='in'||b.result!=='pending')) continue; if(fin&&b.midSeen) delete b.midSeen;
       const id=b.key.split('|')[1]; let row=null, K=null; for(const tb of ((sum.boxscore&&sum.boxscore.players)||[])) for(const st of (tb.statistics||[])){ const a=(st.athletes||[]).find(x=>String(x.athlete.id)===id); if(a){ row=a; K=st.keys||[]; } }
-      const played=!!row&&(row.stats||[]).length>0;
+      // N3 (2026-11-11 audit): a skater who dressed but never took a shift has a box-score line with 0:00 of ice time — the books
+      // void his props like a scratch's; it was graded a loss. No ice-time column = judged as before
+      const toi=row&&K&&K.indexOf('timeOnIce')>=0?String(row.stats[K.indexOf('timeOnIce')]||''):'', noIce=/^0{1,2}:00$/.test(toi), played=!!row&&(row.stats||[]).length>0&&!noIce;
       if(!fin&&!played) continue;
       if(b.mid&&!played){ delete b.mid; sh?shCh++:ch++; continue; }
-      if(!played){ b.result='push'; b.auto='not in the box score (scratched) — void'; b.st=Date.now(); delete b.autoNote; sh?shCh++:settled++; continue; }
+      if(!played){ b.result='push'; b.auto=noIce?'dressed but never took a shift — void':'not in the box score (scratched) — void'; b.st=Date.now(); delete b.autoNote; sh?shCh++:settled++; continue; }
       const num=n=>{ const v=parseFloat(row.stats[K.indexOf(n)]); return isNaN(v)?0:v; }, [,s,side,line]=b.market.split('|');
       const v=s==='sog'?num('shotsTotal'):s==='goal'?num('goals'):s==='pts'?num('goals')+num('assists'):null; if(v==null){ if(fin&&!sh) hand++; continue; }
       if(!fin){ if(!(v>+line)){ if(b.midSeen){ delete b.midSeen; sh?shCh++:ch++; } continue; }

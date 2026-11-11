@@ -307,5 +307,19 @@ bet-log history). See README.md for the model and its backtest.
   + scoreboard once each; a 100-min-old board -> no bets + the note, pull again -> bets back; an NFL bet from another tab
   cut the card to what still fit; a second window's logged bets appeared and survived this window's next save; mid-game:
   seen once -> pending, taken back -> pending again, confirmed 5 min later -> win, final re-checked.
-- NOT done (offered in the audit): sync follow-up after a write (NFL fix 9), per-player stake cap, closes-bot timer, dressed-
-  but-0-TOI void (NHL), push-line EV.
+- 🔁 S3 SYNC FOLLOW-UP (user: "fix S3, S4, S5, N3 and B1"): syncNow(follow) — after a write (PATCH) the page syncs ONCE more
+  8 s later, so a bet another device wrote in the same moment comes back at once; follow === true never chains.
+- 👤 S4 ONE PLAYER, ONE BET'S WORTH: buildCard, after the picks loop — a player's bets in one game together get at most
+  BET_CAP (3u), best first, counting the stakes already in the log on him; a bet left under 0.1u is dropped. Every take
+  on other players still shows. This reverses part of the 2026-10-21 "no caps" choice, for one player only — team and game
+  totals are still uncapped.
+- 🧊 N3 NO ICE TIME = VOID: autoSettle — a box-score line with timeOnIce 0:00 (dressed, never took a shift) settles as a
+  push "dressed but never took a shift — void", like a scratch; it was graded a loss. No timeOnIce key = as before.
+- ⏲ S5 CLOSES TIMER (not code): closes.yml already takes a workflow_dispatch; a live close costs 1 credit per market, the
+  catch-up from price history 10, and GitHub's own timer runs hours late. The fix is the USER's outside timer (cron-job.org,
+  like the NFL alerts): POST https://api.github.com/repos/popcawn/nhl-prop-predictor/actions/workflows/closes.yml/dispatches
+  body {"ref":"main"} every 10 min in the evening, with a token that has Actions read+write on the nhl-prop-predictor repo.
+  Steps were given to the user 2026-11-11; check the workflow's run list (event workflow_dispatch) to see whether it is on.
+- Tested 2026-11-11 in a local copy (fake Odds API, fake ESPN, fake gist): one player's bets held to 3u in total; sync =
+  GET + PATCH, one GET 8 s later that brought in another device's bet, then silence.
+- Still open from the audit: push-line EV (rare here — the books post half-point lines).
