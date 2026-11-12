@@ -227,6 +227,7 @@
   .unlog:hover{color:var(--bad)!important;border-color:var(--bad)!important;font-size:0!important} .unlog:hover::after{content:"✕ remove";font-size:12px}
   .bclink .bskip{color:var(--ink3)} .bclink .bskip:hover{color:var(--bad);border-color:var(--bad)}
   .bcfloor{margin-left:auto;font-size:12.5px;color:var(--ink3);white-space:nowrap} .bcfloor b{font-family:var(--mono);color:var(--ink2)}
+  .wpnote{font-size:13px;color:var(--ink2);margin:0 0 10px;line-height:1.4}
   .skipnote{margin-top:14px;font-size:13px;color:var(--ink3);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   @media(max-width:760px){
     .topin{gap:8px;padding:8px 12px}
@@ -554,7 +555,7 @@ function renderPotChip(now){ const c=$('potChip'); if(!c) return; const AB=allBe
     st('','Bets', AB.length, 'every bet you\'ve logged — NFL, NBA and NHL')+st('','Open', open, 'bets still waiting on a result — every sport')+
     (onG.length?st('','This game', exactUsd(gUsd), 'staked on the game you have open'):'');
   try{ const sh=c.innerHTML.replace(/<div class="stat [^"]*" title="staked on the game you have open">[\s\S]*$/, ''); localStorage.setItem('sims_chip', sh); }catch(e){} }
-window.addEventListener('storage', e=>{ if(e.key==='nfltd_bank'){ BANK=Object.assign({amt:null, at:0, mt:0}, lsJ('nfltd_bank', {})); renderAll(); } else if(e.key==='nhlp_bets') takeOtherWindow();
+window.addEventListener('storage', e=>{ WP=null; if(e.key==='nfltd_bank'){ BANK=Object.assign({amt:null, at:0, mt:0}, lsJ('nfltd_bank', {})); renderAll(); } else if(e.key==='nhlp_bets') takeOtherWindow();
   else if(e.key==='nhlp_shadow'){ try{ SHADOW=mergeShadow(SHADOW, lsJ('nhlp_shadow', [])||[]); }catch(err){} }
   else if(e.key&&Object.values(SPORT_BETS).includes(e.key)) renderAll(); });
 // 🪟 OTHER TABS AND WINDOWS (2026-11-11 audit, the NFL app's fix): (1) a bet logged in another sport's tab only redrew the
@@ -611,12 +612,13 @@ async function syncNow(follow){ const C=syncCfg(); if(!C.token){ syncNote(); ret
       if(remote.bank&&(remote.bank.mt||0)>(BANK.mt||0)){ BANK=remote.bank; lsW('nfltd_bank', BANK); }
       betSnap=snapOf(bets); lsW('nhlp_bets', bets); lsW('nhlp_tomb', TOMB); if(JSON.stringify(bets)!==before) renderAll(); }
     applyBotCloses(await gistJson(gist, CLOSES_FILE));
+    try{ const j=await gistJson(gist, 'nfl-flagged.json'); if(j&&j.weeks){ lsW('nfltd_flagged', j); WP=null; } }catch(e){}   // 📅 the alert bot's record, for the weekly budget
     const mine={app:'nhl-prop-predictor', v:1, at:new Date().toISOString(), bets, tomb:TOMB, bank:BANK, shadow:SHADOW}, canon=p=>JSON.stringify([p.bets, p.tomb, p.bank||null, p.shadow||[]]);
     if(!remote||canon(mine)!==canon(remote)){ await gh('/gists/'+gid, {method:'PATCH', body:JSON.stringify({files:{[SYNC_FILE]:{content:JSON.stringify(mine)}}})}); wrote=true; }
     SYNC_OK=Date.now(); SYNC_ERR=null;
   }catch(e){ SYNC_ERR=e.status===401?'token rejected — reconnect ☁ Sync in the NFL app':(e.status===403||e.status===404)?'GitHub refused — check ☁ Sync in the NFL app':'offline — will retry'; }
   finally{ syncBusy=false; syncNote(); if(syncAgain){ syncAgain=false; syncSoon(400); } else if(wrote&&follow!==true){ clearTimeout(followTimer); followTimer=setTimeout(()=>syncNow(true), 8000); } } }
-function saveBets(){ stampChanges(); lsW('nhlp_bets', bets); renderAll(); syncSoon(); }
+function saveBets(){ WP=null; stampChanges(); lsW('nhlp_bets', bets); renderAll(); syncSoon(); }
 
 // ---------------------------------------------------------------- odds: your books, tickets, links, the other books
 const ODDS_API='https://api.the-odds-api.com/v4/sports/icehockey_nhl';
@@ -789,6 +791,46 @@ let PAPER=lsJ('nhlp_paper', true)!==false, PAPERCARD=[];
 // the review: 161 settled (real Oct 16-26 + background), 94-65-2, +14.7% flat, CLV +6.0%, beat the close 75%; Oct +15.5% / 91,
 // Nov 1-7 +13.6% / 70. DraftKings (-4.1% / 127, beat 58%) and FanDuel stay background. Full stakes at the Dec 1 review if November
 // holds. Only a pick whose BEST price is at a real book counts (the same-side de-dup is unchanged — that's the group that was tested).
+// ===== 📅 WEEKLY BUDGET (user, 2026-11-12: "theres so many bets and i always go over my bankroll. is there anyway we can get
+// all of the bets we see and stay under for the full week" -> "take into account avg amount of bets per week along with
+// potential bets with an edge that i miss"). KEEP THIS BLOCK IDENTICAL in nfl-td-predictor.template.html, alerts/watch.mjs and
+// nhl-prop-predictor.template.html. Every stake = its full size (the card's ¼ Kelly) x m, so a week's stakes add up to
+// WEEK_BUDGET of the bankroll and every bet still shows:
+//  F    = full-size stakes (% of bankroll) of an average week: the last 3 weeks of every bet the card made — the ones you logged
+//         (b.full, else b.stake) plus every one the phone-alert bot found (nfl-flagged.json in the ☁ Sync gist), placed or not;
+//  base = min(1, WEEK_BUDGET x 100 / F);
+//  brake: what is left of this week's budget ($) over the full-size stakes still to come this week (F x the share of a week
+//         still ahead, WEEK_SHARE — measured on the user's own Oct 13 - Nov 9 log), so a busy week shrinks the later stakes;
+//  m    = min(base, brake). Weeks run Tuesday 00:00 - Monday 24:00 Eastern. Off before WEEK_FROM (m = 1).
+const WEEK_BUDGET=0.9, WEEK_FROM='2026-11-17', WEEK_SHARE=[[0,0],[24,.11],[48,.23],[72,.43],[96,.62],[120,.78],[132,.85],[144,.92],[156,.94],[168,1]];
+const ET_PARTS=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York', hourCycle:'h23', year:'numeric', month:'2-digit', day:'2-digit', weekday:'short', hour:'2-digit', minute:'2-digit'});
+function etWeek(t){ const p={}; for(const x of ET_PARTS.formatToParts(new Date(t))) p[x.type]=x.value; const wd=['Tue','Wed','Thu','Fri','Sat','Sun','Mon'].indexOf(p.weekday);
+  return {key:new Date(Date.UTC(+p.year, +p.month-1, +p.day-wd)).toISOString().slice(0,10), h:wd*24+(+p.hour%24)+(+p.minute)/60}; }
+function weekShare(h){ for(let i=1;i<WEEK_SHARE.length;i++){ const [h1,s1]=WEEK_SHARE[i], [h0,s0]=WEEK_SHARE[i-1]; if(h<=h1) return s0+(s1-s0)*(h-h0)/(h1-h0); } return 1; }
+function flagId(game, key, market){ const m=String(market||''); return game+'|'+key+'|'+(m.startsWith('P|')?m.split('|').slice(0,3).join('|'):m); }   // a prop at another line is the same bet
+// bets = every logged bet of every sport ({id, ts, usd, stake, full?, game, key, market, legs?}); flagged = nfl-flagged.json
+// ({weeks: {weekKey: {flagId: [full units, t]}}}); bank = the bankroll now ($)
+function weekPlan(now, bets, flagged, bank){
+  const W=etWeek(now); if(W.key<WEEK_FROM || !(bank>0)) return {on:false, m:1, key:W.key};
+  const per={}, add=(wk, id, u)=>{ if(!(u>0)) return; const o=per[wk]=per[wk]||{}; o[id]=Math.max(o[id]||0, u); };
+  for(const [wk,o] of Object.entries((flagged&&flagged.weeks)||{})) for(const [id,x] of Object.entries(o||{})) add(wk, id, +(x&&x[0])||0);
+  for(const b of bets||[]){ const t=Date.parse(b.ts); if(!t) continue; add(etWeek(t).key, (b.legs||!b.key)?'L|'+b.id:flagId(b.game, b.key, b.market), +(b.full!=null?b.full:b.stake)||0); }
+  const past=Object.keys(per).filter(k=>k<W.key).sort().slice(-3).map(k=>Object.values(per[k]).reduce((a,x)=>a+x, 0));
+  const F=past.length?past.reduce((a,x)=>a+x, 0)/past.length:100, base=Math.min(1, WEEK_BUDGET*100/Math.max(F, 1)), budget=WEEK_BUDGET*bank;
+  let spent=0; for(const b of bets||[]){ const t=Date.parse(b.ts); if(t && etWeek(t).key===W.key) spent+=+b.usd||0; }
+  const rest=F/100*bank*(1-weekShare(W.h)), left=Math.max(0, budget-spent), m=!(left>0)?0:rest>1e-9?Math.min(base, left/rest):base;
+  return {on:true, m, base, F, n:past.length, budget, spent, left, key:W.key};
+}
+// ===== end of the weekly budget block
+let WP=null, WPt=0;   // this week's plan, recomputed at most every 5 s (and after every save / another tab's change)
+function curPlan(){ if(WP&&Date.now()-WPt<5e3) return WP; try{ WP=weekPlan(Date.now(), allBets(), lsJ('nfltd_flagged', null), bankNow()); }catch(e){ WP={on:false, m:1, key:''}; } WPt=Date.now(); return WP; }
+// the line that says what this week's sizing is doing
+function wpNote(){ let P; try{ P=curPlan(); }catch(e){ return ''; } const $=x=>exactUsd(x);
+  if(!P.on) return P.key<WEEK_FROM?`<div class="wpnote">📅 From Tuesday Nov 17, every real stake (here: BetMGM) is sized so a whole week of bets fits ${Math.round(WEEK_BUDGET*100)}% of your bankroll — every bet still shows, just smaller</div>`:'';
+  if(P.m<0.02) return `<div class="wpnote">📅 <b>This week\'s budget is used up</b> — ${$(P.spent)} staked of ${$(P.budget)}. New bets start Tuesday 12 AM Eastern.</div>`;
+  return `<div class="wpnote" title="your last ${P.n} week${P.n===1?'':'s'} of bets (logged + the ones the phone alerts found) came to about ${Math.round(P.F)}% of your bankroll at full size; every stake is cut to fit ${Math.round(WEEK_BUDGET*100)}% a week, and a busy week cuts the later stakes more">📅 This week: stakes at <b>${Math.round(P.m*100)}%</b> of full size so the week fits ${$(P.budget)} — ${$(P.spent)} used${P.m<P.base-0.005?' · a busy week, so later stakes are smaller':''}</div>`; }
+function budgetOut(){ try{ const P=curPlan(); return !!(P.on&&P.m<0.02); }catch(e){ return false; } }
+function noteWP(){ const body=$('cardBody'); if(!body) return; let el=$('wpNote'); if(!el){ el=document.createElement('div'); el.id='wpNote'; body.parentNode.insertBefore(el, body); } el.innerHTML=wpNote(); }
 const REAL_BOOKS=['betmgm'], REAL_SCALE=0.5, isRealBk=b=>REAL_BOOKS.includes(b), realBkNames=()=>REAL_BOOKS.map(bookName).join(' / ');
 // ⏱ OLD PRICES MAKE NO BETS (2026-11-11 audit, S1): a board stayed good until 6 hours after the start, so prices pulled at
 // 1 PM still made "bets" at 6:50 PM — after a scratch had moved every line. A game's prices now count only for BOARD_NEAR
@@ -838,6 +880,8 @@ const skipKey=c=>c.game+'|'+c.key+'|'+statOf(c.market);
 const skipBtn=c=>`<button class="ss bskip" data-skip="${esc(skipKey(c))}" title="hide this bet — it stays hidden when you pull again tonight">✕ Skip</button>`;
 const nightSkips=()=>Object.keys(SKIP).filter(k=>gameOf(k.split('|')[0]));
 const skippedNote=()=>{ const n=nightSkips().length; return n?`<div class="skipnote">${n} skipped tonight <button class="ss" id="unskip">↩ Bring ${n>1?'them':'it'} back</button></div>`:''; };
+// 📅 the weekly budget on real-money picks: full size kept (p.full), the stake is full x m; none left this week -> stake 0 (off the card)
+function weekScale(L){ const P=curPlan(); for(const p of L){ if(p.held) continue; p.full=p.stake; if(P.on) p.stake=P.m>=0.02?Math.max(0.1, Math.round(p.full*P.m*10)/10):0; } }
 function buildCard(){
   const held=new Set(bets.filter(b=>b.result==='pending').map(b=>b.game+'|'+b.key+'|'+statOf(b.market))), picks=[], seen=new Set();
   for(const c of CANDS.filter(c=>c.tier==='take'&&!c.dup).sort((a,b)=>b.kelly-a.kelly)){ const pk=c.game+'|'+c.key+'|'+statOf(c.market);
@@ -851,11 +895,12 @@ function buildCard(){
     for(let i=picks.length-1;i>=0;i--) if(!picks[i].held&&picks[i].stake<0.1) picks.splice(i,1); }
   if(PAPER){ PAPERCARD=picks.filter(p=>!p.held&&!isRealBk(p.book)); recordShadow(PAPERCARD);
     const real=picks.filter(p=>isRealBk(p.book)); for(const p of real) if(!p.held) p.stake=Math.max(0.1, Math.round(p.stake*REAL_SCALE*10)/10);
+    weekScale(real);
     if(!real.length){ ROOM=null; CARD=[]; return; }
-    ROOM=fitRoom(real.filter(p=>!p.held), p=>roundUsd(p.stake*(unitUsd()||0)));
+    ROOM=fitRoom(real.filter(p=>!p.held&&p.stake>0), p=>roundUsd(p.stake*(unitUsd()||0)));
     CARD=real.filter(p=>p.held||ROOM.fit.includes(p)); return; }
-  PAPERCARD=[];
-  ROOM=fitRoom(picks.filter(p=>!p.held), p=>roundUsd(p.stake*(unitUsd()||0)));
+  PAPERCARD=[]; weekScale(picks);
+  ROOM=fitRoom(picks.filter(p=>!p.held&&p.stake>0), p=>roundUsd(p.stake*(unitUsd()||0)));
   CARD=picks.filter(p=>p.held||ROOM.fit.includes(p)); recordShadow();
 }
 function recordShadow(paper){ const have=new Set(SHADOW.map(r=>r.id)), k=unitUsd(); let n=0;
@@ -879,7 +924,7 @@ function undoLog(){ if(!UNDO) return; const ids=new Set(UNDO), n0=bets.length; b
 // one bet per player per stat: a second bet on the same player's stat (any line, either side) is refused
 function logBet(c, stake){ if(bets.some(b=>b.result==='pending'&&b.game===c.game&&b.key===c.key&&statOf(b.market)===statOf(c.market))) return false; const k=unitUsd();
   bets.unshift({id:Date.now()+'_'+Math.round(Math.random()*1e6), ts:new Date().toISOString(), ko:c.tip, ev:c.evId, game:c.game, key:c.key, player:c.name, market:c.market, odds:c.odds, book:c.book,
-    modelProb:+c.mp.toFixed(4), rawP:+c.model.toFixed(4), ...(c.mkt!=null?{mktP:+c.mkt.toFixed(4)}:{}), pmu:+c.mu.toFixed(3), ...(c.nOth!=null?{nOth:c.nOth, ...(c.nNear?{nNear:1}:{})}:{}), stake:+(+stake).toFixed(1), ...(k!=null?{usd:roundUsd(stake*k)}:{}), closeOdds:'', result:'pending'}); noteLogged(bets[0].id);
+    modelProb:+c.mp.toFixed(4), rawP:+c.model.toFixed(4), ...(c.mkt!=null?{mktP:+c.mkt.toFixed(4)}:{}), pmu:+c.mu.toFixed(3), ...(c.full!=null?{full:c.full}:{}), ...(c.nOth!=null?{nOth:c.nOth, ...(c.nNear?{nNear:1}:{})}:{}), stake:+(+stake).toFixed(1), ...(k!=null?{usd:roundUsd(stake*k)}:{}), closeOdds:'', result:'pending'}); noteLogged(bets[0].id);
   return true; }
 
 // ---------------------------------------------------------------- rendering
@@ -959,7 +1004,7 @@ function renderCard(){
   // are tracked — a one-line note under the card, or the full banner when there's no real bet tonight
   const bgN=PAPERCARD.length, bgNote=PAPER?`<div class="muted" style="font-size:13px;margin-top:10px">🕶 ${bgN?`${bgN} would-be bet${bgN===1?'':'s'} at your other books tracked in the background — no money on ${bgN===1?'it':'them'}. `:''}Only ${realBkNames()} is real money (half stakes) since the Nov 8 review. Details: Log → ⚙ More → 🕶 Background bets.</div>`:'';
   if(PAPER&&!CARD.length&&!(ROOM&&ROOM.out.length)){ const a=shadowAgg(SHADOW.filter(r=>(r.why||[]).includes('paper'))), done=a.w+a.l, pc=v=>(v>=0?'+':'')+(v*100).toFixed(1)+'%';
-    body.innerHTML=cardStat('done',`🕶 NO ${realBkNames().toUpperCase()} BETS TONIGHT`, any?`${bgN} would-be bet${bgN===1?'':'s'} at your other books tracked — nothing to bet`:'pull tonight\'s prices for the bets')+
+    body.innerHTML=(budgetOut()&&any ? cardStat('none','📅 WEEK’S BUDGET USED UP', `no new ${realBkNames()} bets until Tuesday — the week already holds its full budget`) : cardStat('done',`🕶 NO ${realBkNames().toUpperCase()} BETS TONIGHT`, any?`${bgN} would-be bet${bgN===1?'':'s'} at your other books tracked — nothing to bet`:'pull tonight\'s prices for the bets'))+
       `<div class="muted" style="font-size:14px">Since the Nov 8 review only ${realBkNames()} bets are real money, at half stakes. At your other books the app logs every bet it would have made and settles them itself — no money on them.${done?` Background so far <b>${a.w}-${a.l}${a.p?'-'+a.p:''}</b> · ROI <b class="${a.roi>0?'ev-pos':a.roi<0?'ev-neg':''}">${pc(a.roi)}</b>${a.clv!=null?` · CLV ${pc(a.clv)}`:''}.`:''} Details: Log → ⚙ More → 🕶 Background bets.</div>`+skippedNote(); return; }
   if(!CARD.length&&ROOM&&ROOM.out.length){ body.innerHTML=cardStat('done','💰 BANKROLL IN PLAY', `${ROOM.out.length} bet${ROOM.out.length>1?'s':''} wait${ROOM.out.length>1?'':'s'} for room`)+roomNote(ROOM)+skippedNote()+bgNote; return; }
   if(!CARD.length){ const open=bets.filter(b=>b.result==='pending'&&gameOf(b.game)).length;
@@ -1043,7 +1088,7 @@ function renderShadow(){ const el=$('shadowStats'), al=$('shadowAlert'); if(!el)
     `</tbody></table><div class="muted" style="font-size:12px;margin-top:4px">These are never bet and never touch your bankroll. Want them back on the card? Untick background mode or the filter under odds settings.</div>`;
   labelCells(el); const hot=rows.filter(x=>shadowTrend(x.a,x.k).hot&&whyOn(x.k));
   if(al) al.innerHTML=hot.length?`<div style="margin:0 0 10px;padding:8px 10px;border-radius:8px;border:1px solid var(--good);font-size:13px">📈 ${hot.map(({k,a})=>`${k==='paper'?'Your background bets':'Bets the <b>'+esc(FILTERS[k])+'</b> filter hid'} are up <b>${pc(a.roi)}</b> over ${a.w+a.l} settled`).join(' · ')} — worth a re-test (details: ⚙ More).</div>`:''; }
-function renderAll(){ buildCands(); buildCard(); renderSlate(); renderGame(); renderBoard(); renderCard(); staleNote(); renderBets(); oddsStatus(); showHistCost(); }
+function renderAll(){ buildCands(); buildCard(); renderSlate(); renderGame(); renderBoard(); renderCard(); staleNote(); noteWP(); renderBets(); oddsStatus(); showHistCost(); }
 
 // ---------------------------------------------------------------- auto-settle (ESPN box scores) and closing prices
 let AUTO_NOTE='', autoBusy=false;
