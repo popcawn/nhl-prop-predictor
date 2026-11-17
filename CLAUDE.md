@@ -355,3 +355,18 @@ bet-log history). See README.md for the model and its backtest.
   $2 → $1, used-up card.
 - NHL: weekScale(L) runs on the REAL (BetMGM) picks after REAL_SCALE, and on every pick when not in background mode; the
   background (paper) bets are untouched. NBA is paper-only and has no weekly budget.
+
+## 🤖 NBA hourly paper pulls (2026-11-17, user: "create a timer that pulls nba odds every hour" -> "Hourly, last 6 h before tip")
+- `closes/nba-paper.mjs`, a second step of closes.yml (continue-on-error; job timeout 15 min; input `paper` live/dry/off).
+  Every run (the user's cron-job.org timer, every 10 min): The Odds API's free NBA game list -> games starting in 5 min..6 h
+  not pulled in 55 min (`nba-paper-bot.json` in the ☁ Sync gist: pulled {ev|oddsId: t}, spent {day: credits}, last).
+  Nothing due = exits, no Chrome. Due -> npm i puppeteer-core@24.43.1 (not committed), the runner's Google Chrome headless
+  (normal user agent — ESPN refuses HeadlessChrome), seeds a fresh localStorage (nfltd_sync token + gist id, nbap_oddskey,
+  oddscfg with 3PT + PRA unticked = 3 credits a game, reserve 3000, nbap_auto close/hist OFF — closes are closes.mjs's job,
+  plus nfltd_bets / nhlp_bets / newest bank from the gist so stakes in $ match the user's pot), opens the LIVE NBA page and
+  calls `window.__nbaBot.pull(game)` = the app's own pullAll(game) -> buildCard -> recordShadow (paper bets), then waits for
+  the app's own ☁ Sync. A confirm (below reserve) is dismissed = no pull. Budget: ~6 pulls × 3 credits a game ≈ 4K/month.
+- TESTED 2026-11-17 on a local copy of the page + a fake gist (PAPER_GIST_FILE; the browser's GitHub calls answered from
+  that file): dry runs (nothing in 6 h; 12.3 h window -> NY@TOR; reserve 999999 -> skipped), one REAL pull NY@TOR (3 credits,
+  50,373 left, 1 paper bet Murray-Boyles reb U6.5 -112 FD, $3 at a $500 pot, synced: GET, GET, PATCH nba-sync.json, GET),
+  re-run at once -> 0 due. 17 s a run. The real gist + GitHub runner were not exercised before pushing.

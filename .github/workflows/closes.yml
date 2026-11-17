@@ -5,6 +5,9 @@
 #    history (10 credits per market) — GitHub runs this account's timed jobs 3-10 HOURS late (checked 2026-11-04 over
 #    5 weeks), so the live pull rarely lands in time and the catch-up is what fills the gaps.
 # The prices go to <sport>-closes.json in the ☁ Sync gist and the apps copy them in when they sync.
+# + 🤖 NBA PAPER PULLS (closes/nba-paper.mjs, 2026-11-17): every NBA game starting within 6 h that wasn't pulled in the last
+#   55 min gets one ⚡ Pull of points / rebounds / assists (3 credits) by the LIVE NBA app in a headless Chrome, which records
+#   its background (paper) bets and syncs them like any device. Never below 3,000 credits; nothing due = no Chrome.
 # Needs two repo secrets: ODDS_API_KEY (The Odds API) and SYNC_TOKEN (a GitHub token with the gist scope).
 name: Closing prices
 
@@ -24,6 +27,9 @@ on:
       cap:
         description: 'catch-up: most credits one run may spend'
         default: '800'
+      paper:
+        description: 'NBA paper pulls: live, dry (list only) or off'
+        default: 'live'
 
 concurrency:
   group: closes
@@ -32,7 +38,7 @@ concurrency:
 jobs:
   closes:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -46,3 +52,12 @@ jobs:
           CLOSES_MODE: ${{ github.event.inputs.mode || 'live' }}
           CLOSES_HIST_DAYS: ${{ github.event.inputs.days || '3' }}
           CLOSES_HIST_CAP: ${{ github.event.inputs.cap || '800' }}
+      - name: NBA paper pulls (hourly, last 6 h before tip)
+        if: always()
+        continue-on-error: true
+        timeout-minutes: 4
+        run: node closes/nba-paper.mjs
+        env:
+          ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+          SYNC_TOKEN: ${{ secrets.SYNC_TOKEN }}
+          PAPER_MODE: ${{ github.event.inputs.paper || 'live' }}
