@@ -357,8 +357,10 @@ bet-log history). See README.md for the model and its backtest.
   background (paper) bets are untouched. NBA is paper-only and has no weekly budget.
 
 ## 🤖 NBA hourly paper pulls (2026-11-17, user: "create a timer that pulls nba odds every hour" -> "Hourly, last 6 h before tip")
-- `closes/nba-paper.mjs`, a second step of closes.yml (continue-on-error; job timeout 15 min; input `paper` live/dry/off).
-  Every run (the user's cron-job.org timer, every 10 min): The Odds API's free NBA game list -> games starting in 5 min..6 h
+- `closes/nba-paper.mjs`, RUN BY nfl-td-predictor's alerts.yml (2 steps after the alert check: checkout of this repo's
+  closes/ into nhl/, then node; continue-on-error, 3 min; skipped for test/dry runs). Why there: closes.yml had NO
+  cron-job.org dispatch since Nov 11 (only GitHub's late schedule, ~5 runs a day) while alerts.yml gets ~50 a day.
+  Every run: The Odds API's free NBA game list -> games starting in 5 min..6 h
   not pulled in 55 min (`nba-paper-bot.json` in the ☁ Sync gist: pulled {ev|oddsId: t}, spent {day: credits}, last).
   Nothing due = exits, no Chrome. Due -> npm i puppeteer-core@24.43.1 (not committed), the runner's Google Chrome headless
   (normal user agent — ESPN refuses HeadlessChrome), seeds a fresh localStorage (nfltd_sync token + gist id, nbap_oddskey,

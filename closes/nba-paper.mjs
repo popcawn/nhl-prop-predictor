@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // 🤖 NBA HOURLY PAPER PULLS (user, 2026-11-17: "create a timer that pulls nba odds every hour" -> "Hourly, last 6 h before tip").
-// The NBA app is background-only (paper): a would-be bet is only recorded when a device presses ⚡ Pull. This runs inside
-// closes.yml (every 10 min from the user's cron-job.org timer) and, for each NBA game starting within WINDOW_H hours that
+// The NBA app is background-only (paper): a would-be bet is only recorded when a device presses ⚡ Pull. Every run, for each NBA game starting within WINDOW_H hours that
 // was not pulled in the last EVERY_MIN minutes, opens the LIVE NBA app in a headless Chrome and presses Pull for that game
 // (window.__nbaBot.pull = the app's own pullAll(game)), so the background bets come from the app's own rules, then lets the
 // app ☁ Sync them like any other device. Markets: points, rebounds, assists (3 credits a game; 3-pointers and PRA are
 // filtered out of every bet, so they are left to the manual pulls). No Chrome is started when nothing is due.
+// WHERE IT RUNS: a step of nfl-td-predictor's alerts.yml (checks out this folder) — that workflow's cron-job.org timer fires
+// every 15 min; closes.yml's own timer had not fired since Nov 11 (only GitHub's late schedule, ~5 runs a day).
 // State: nba-paper-bot.json in the ☁ Sync gist {pulled: {game|tip: t}, spent: {day: credits}, last}.
 // Env: ODDS_API_KEY + SYNC_TOKEN (repo secrets); PAPER_MODE live | dry (no Chrome, no writes) | off; PAPER_WINDOW_H (6);
 // PAPER_EVERY_MIN (55); PAPER_RESERVE (3000: never pull below this many credits — the NFL alerts come first);
