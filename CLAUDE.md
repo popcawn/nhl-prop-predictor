@@ -372,3 +372,17 @@ bet-log history). See README.md for the model and its backtest.
   that file): dry runs (nothing in 6 h; 12.3 h window -> NY@TOR; reserve 999999 -> skipped), one REAL pull NY@TOR (3 credits,
   50,373 left, 1 paper bet Murray-Boyles reb U6.5 -112 FD, $3 at a $500 pot, synced: GET, GET, PATCH nba-sync.json, GET),
   re-run at once -> 0 due. 17 s a run. The real gist + GitHub runner were not exercised before pushing.
+
+## 🔄 Every sport's log on every page (2026-11-20)
+- User: "I noticed the bankroll only updates if I click the log tab on each league". Each page's ☁ Sync read only its own
+  sport's file, so the pot missed bets settled / logged on another device until that sport's page was opened here (the
+  user's PC was 17 settled NHL bets and 13 NFL bets behind the gist). `pullOtherSports(gist)` (one block, IDENTICAL in the
+  NFL, NBA and NHL templates, right after `allBets`) runs inside every sync: it merges the other two sports' files into
+  this browser's nfltd_bets / nbap_bets / nhlp_bets + tombstones (the owners' merge: newest mt wins, a tie goes to the
+  record that knows more, tombstones delete) and the pot by its mt. READ-ONLY on the gist: only a sport's own page
+  writes its file. An open page of that sport picks the change up through its storage listener (takeOtherWindow).
+  Settling still happens only on the sport's own page (some device has to open it).
+- Tested 2026-11-20 in a local copy with a fake GitHub (serve_mockgh.mjs in %TEMP%): NFL page pot 501 -> 539.18 (2 NHL
+  bets settled elsewhere, a new NHL bet, an NBA deletion; only nfl-td-sync.json written); NHL page took a new NFL win
+  (564.18) without re-stamping its bets; NBA page same pot, no errors; an NHL page left open in another tab updated
+  (557.18) when the NFL page synced.
