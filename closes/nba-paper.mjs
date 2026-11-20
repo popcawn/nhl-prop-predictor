@@ -72,15 +72,15 @@ if (MODE === 'dry') { notice(`would pull ${dueEv.map(e => `${e.away_team} @ ${e.
 
 // 2) the whole pot from the gist, so the app sizes the paper bets in dollars like your devices: the newest bank and every
 // sport's bets (the NBA app only READS nfltd_bets / nhlp_bets — they are never written back)
-const nfl = (await fileJson(G, 'nfl-td-sync.json')) || {}, nhl = (await fileJson(G, 'nhl-sync.json')) || {}, nba = (await fileJson(G, 'nba-sync.json')) || {};
-const bank = [nfl.bank, nhl.bank, nba.bank].filter(b => b && b.amt).sort((a, b) => (b.mt || 0) - (a.mt || 0))[0] || null;
+const nfl = (await fileJson(G, 'nfl-td-sync.json')) || {}, nhl = (await fileJson(G, 'nhl-sync.json')) || {}, nba = (await fileJson(G, 'nba-sync.json')) || {}, ufc = (await fileJson(G, 'ufc-sync.json')) || {};
+const bank = [nfl.bank, nhl.bank, nba.bank, ufc.bank].filter(b => b && b.amt).sort((a, b) => (b.mt || 0) - (a.mt || 0))[0] || null;
 const seed = {
   nfltd_sync: JSON.stringify(MOCK ? { token: 'mock', gistId: 'mock' } : { token: TOKEN, gistId: G.id }),
   nbap_oddskey: KEY,
   nbap_oddscfg: JSON.stringify({ books: ['fanduel', 'draftkings', 'betmgm', 'williamhill_us', 'fanatics'], booksV2: 1, mk: MARKETS, reserve: RESERVE, state: '' }),
   nbap_auto: JSON.stringify({ close: false, hist: false, v2: 1 }),   // closing prices are closes.mjs's job
   nbap_paper: 'true', nbap_usdround: 'true',
-  nfltd_bets: JSON.stringify(nfl.bets || []), nhlp_bets: JSON.stringify(nhl.bets || []), ...(bank ? { nfltd_bank: JSON.stringify(bank) } : {}),
+  nfltd_bets: JSON.stringify(nfl.bets || []), nhlp_bets: JSON.stringify(nhl.bets || []), ufcs_bets: JSON.stringify(ufc.bets || []), ...(bank ? { nfltd_bank: JSON.stringify(bank) } : {}),
 };
 
 // 3) the live app in a headless Chrome
