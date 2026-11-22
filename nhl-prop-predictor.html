@@ -87,6 +87,7 @@
   .wkbody details.daygrp{border:1px solid var(--line2);border-radius:10px;background:var(--panel2);margin:0 0 8px} .wkbody details.daygrp>summary{padding:8px 11px;border-bottom:none} .wkbody details.daygrp[open]>summary{border-bottom:1px solid var(--line2);margin-bottom:0}
   .wkbody details.daygrp .scroll{padding:4px 8px 8px}
   details.daygrp.curday{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent);background:rgba(77,163,255,.08)} details.daygrp.curday>summary::after{content:"📍 tonight";margin-left:8px;font-size:11px;font-weight:800;color:var(--accent)}
+  .livetag{display:inline-block;margin-left:8px;font-size:11px;font-weight:800;letter-spacing:.06em;color:#fff;background:var(--bad);border-radius:6px;padding:1px 7px;vertical-align:1px;animation:livepulse 1.6s ease-in-out infinite} .livetag.sm{font-size:10px;padding:0 5px;margin-left:6px} @keyframes livepulse{50%{opacity:.55}}
   .sub{margin-top:12px}
   .rowtake td{background:rgba(52,211,153,.06)}
   .stsel{font-size:11px;padding:1px 2px}
@@ -1078,7 +1079,7 @@ const cnt=a=>a.open===a.n?`${a.n} open bet${a.n>1?'s':''}`:`${a.n} bet${a.n>1?'s
       R.map(({b,clv,live,pl,stk})=>{ const mine=+String(b.market).split('|')[3], moved=b.cur&&b.cur.l!=null&&b.cur.l!==mine, arrow=moved?(b.cur.l<mine?'▼':'▲')+b.cur.l+' ':'';
         const sideOf=String(b.market).split('|')[2], against=moved&&((sideOf==='U'&&b.cur.l>mine)||(sideOf==='O'&&b.cur.l<mine)), arrowH=moved?`<span class="${against?'clv-bad':'ev-pos'}" title="${against?'the line moved against your bet':'the line moved your way'}">${arrow.trim()}</span> `:'';
         const clvTxt=clv!=null?` <b class="${cg(clv)}">${pc(clv)}</b>${b.closeEst?'<span class="muted" title="the line moved — this is the equivalent price at your line"> ≈</span>':''}`:b.result!=='pending'||!b.cur?'':live!=null?` <span class="${cg(live)}" style="font-size:12px" title="${esc((moved?`the line moved to ${b.cur.l} (${b.cur.o}) — about ${b.cur.q} at your line. `:`now ${b.cur.q}. `)+'A live read, not final until the close.')}">${arrowH}<span class="muted">≈ ${esc(b.cur.q)} ${moved?'at your '+mine:'now'} ·</span> ${pc(live)}</span>`:moved?` <span style="font-size:12px">${arrowH}</span>`:'';
-        return `<tr><td class="l"><b title="chance when logged: ${b.modelProb!=null?pct(b.modelProb):'—'}">${esc(b.player)}</b> <span class="muted" title="${esc(fmtGame(b.game))}">${mktLabel(b.market)}</span>${b.offBoard&&b.result==='pending'?' <span style="color:var(--warn);font-size:12px" title="your book no longer offers this prop">⚠ off the board</span>':''}</td>`+
+        return `<tr><td class="l"><b title="chance when logged: ${b.modelProb!=null?pct(b.modelProb):'—'}">${esc(b.player)}</b>${betLive(b)?'<span class="livetag sm" title="game in progress">● LIVE</span>':''} <span class="muted" title="${esc(fmtGame(b.game))}">${mktLabel(b.market)}</span>${b.offBoard&&b.result==='pending'?' <span style="color:var(--warn);font-size:12px" title="your book no longer offers this prop">⚠ off the board</span>':''}</td>`+
           `<td class="odds">${esc(b.odds)}${bkBadge(b.book)}</td><td><input class="betclose" data-id="${b.id}" value="${esc(b.closeOdds||'')}" placeholder="close"${b.closeSrc?` title="${b.closeSrc==='hist'?'your book 5 min before the start (price history)':b.closeSrc==='bot'?'your book up to 30 min before the start (the closing-prices bot)':'your book in the last 15 min before the start'}"`:''} style="width:62px;font-family:var(--mono);font-size:13px;text-align:right">${clvTxt}</td>`+
           `<td title="${b.stake}u">${betStakeTxt(b)}</td><td class="${b.result==='pending'?'':'muted'}">${amtc(stk*((oddsDec(b.odds)||1)-1))}</td><td><select class="betres ss" data-id="${b.id}">${['pending','win','loss','push'].map(x=>`<option${x===b.result?' selected':''}>${x}</option>`).join('')}</select>${b.auto&&b.result!=='pending'?` <span title="${esc((b.mid?'settled mid-game from ESPN\'s live box score — it was already decided; checked again at the final: ':'settled from ESPN: ')+b.auto)}">${b.mid?'⏱':'🤖'}</span>`:''}${b.result==='pending'&&b.autoNote?` <span title="${esc(b.autoNote)}" style="cursor:help">✋</span>`:''}</td>`+
           `<td class="${pl!=null?g(pl):''}">${pl==null?'—':mny(pl)}</td><td><button class="ss betdel" data-id="${b.id}" style="color:var(--warn)">✕</button></td></tr>`; }).join('')+`</tbody></table></div>`;
@@ -1087,7 +1088,7 @@ const cnt=a=>a.open===a.n?`${a.n} open bet${a.n>1?'s':''}`:`${a.n} bet${a.n>1?'s
       `<span class="wktally" title="${TOTBET_TIP}">💵 Total bet <b>${amt(a.spent)}</b>${a.riding?` · <span class="muted">${amt(a.riding)} still riding · could win ${amt(a.towin)}</span>`:''}</span></summary><div class="wkbody">`;
     const days=new Map(); for(const r of R){ const k=dayOf(r.b); (days.get(k)||days.set(k,[]).get(k)).push(r); }
     [...days.keys()].sort((x,y)=>y-x).forEach(dk=>{ const D=days.get(dk), da=agg(D), open=LOGOPEN.has(dk)?LOGOPEN.get(dk):false;
-      html+=`<details class="daygrp${dk===tonight?' curday':''}" data-d="${dk}"${open?' open':''}><summary><b>${new Date(dk).toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'})}</b> <span class="muted">· ${cnt(da)}${da.w+da.l?` · ${rec(da)}`:''} · spent ${amt(da.spent)}${da.open?` · could win ${amt(da.towin)}`:''}</span>${da.w+da.l?` <b class="${g(da.net)}">${mny(da.net)}</b>`:''}</summary>`+table(D)+'</details>'; });
+      html+=`<details class="daygrp${dk===tonight?' curday':''}" data-d="${dk}"${open?' open':''}><summary><b>${new Date(dk).toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'})}</b>${D.some(r=>betLive(r.b))?'<span class="livetag" title="a game with your open bets is in progress — bets settle as plays happen, the rest at the final">● LIVE</span>':''} <span class="muted">· ${cnt(da)}${da.w+da.l?` · ${rec(da)}`:''} · spent ${amt(da.spent)}${da.open?` · could win ${amt(da.towin)}`:''}</span>${da.w+da.l?` <b class="${g(da.net)}">${mny(da.net)}</b>`:''}</summary>`+table(D)+'</details>'; });
     html+='</div></details>'; });
   body.innerHTML=html; const bs=$('bookStats'); if(bs){ bs.innerHTML=bkTable; labelCells(bs); }
 }
@@ -1128,13 +1129,19 @@ let AUTO_NOTE='', autoBusy=false;
 // or goal can be taken back (a stat correction, a goal wiped out on review): one look could settle a win that is gone a
 // minute later, and the pot grew and room opened until the final.
 const MID_CONFIRM_MS=4*60e3;
+// 🔴 LIVE TAG (user, 2026-11-22: "add a live tag", the NFL log's): an open bet whose game ESPN has in progress gets ● LIVE,
+// and so does its night. The state comes from the summary autoSettle already reads every 10 min; until a game has been
+// checked (or if the last check is 25+ min old) it counts as live for 3 h after its start
+const GAME_STATE=new Map(); let LIVE_CH=false;
+function noteGameState(ev, t){ if(!ev||!t||!t.state) return; const live=t.state==='in'&&!t.completed, o=GAME_STATE.get(ev); GAME_STATE.set(ev, {live, at:Date.now()}); if(!o||o.live!==live) LIVE_CH=true; }
+function betLive(b){ if(!b||b.result!=='pending') return false; const s=GAME_STATE.get(b.ev), now=Date.now(); if(s&&now-s.at<25*60e3) return s.live; const t=Date.parse(b.ko||0); return t>0&&t<=now&&now-t<3*3600e3; }
 async function autoSettle(manual){
   if(autoBusy) return; const due=b=>b.ev&&b.key&&(b.result==='pending'?Date.now()>Date.parse(b.ko||0):!!b.mid), pend=bets.filter(due).concat(SHADOW.filter(due));
   if(!pend.length){ if(manual){ $('autoMsg').textContent='🤖 no open bet\'s game has started yet'; } return; }
   autoBusy=true; let settled=0, hand=0, mid=0, fixed=0, ch=0, shCh=0, seenN=0; const cache=new Map();
   try{ for(const b of pend){ let sum=cache.get(b.ev); if(sum===undefined){ try{ sum=await (await fetch(SUM+b.ev)).json(); }catch(e){ sum=null; } cache.set(b.ev, sum); }
       const t=((((sum&&sum.header&&sum.header.competitions)||[])[0]||{}).status||{}).type||{}, fin=!!t.completed, sh=String(b.id).startsWith('sh|');
-      if(!fin&&(t.state!=='in'||b.result!=='pending')) continue; if(fin&&b.midSeen) delete b.midSeen;
+      noteGameState(b.ev, t); if(!fin&&(t.state!=='in'||b.result!=='pending')) continue; if(fin&&b.midSeen) delete b.midSeen;
       const id=b.key.split('|')[1]; let row=null, K=null; for(const tb of ((sum.boxscore&&sum.boxscore.players)||[])) for(const st of (tb.statistics||[])){ const a=(st.athletes||[]).find(x=>String(x.athlete.id)===id); if(a){ row=a; K=st.keys||[]; } }
       // N3 (2026-11-11 audit): a skater who dressed but never took a shift has a box-score line with 0:00 of ice time — the books
       // void his props like a scratch's; it was graded a loss. No ice-time column = judged as before
@@ -1153,7 +1160,7 @@ async function autoSettle(manual){
       b.result=r; b.st=Date.now(); delete b.autoNote; sh?shCh++:settled++; }
     for(const r of pend) if(String(r.id).startsWith('sh|')&&r.result==='pending'&&r.autoNote&&Date.now()>Date.parse(r.ko||0)+36*3600e3){ r.result='push'; r.auto='not in the box score — void'; r.st=Date.now(); shCh++; }
     if(pend.some(b=>String(b.id).startsWith('sh|'))) saveShadow();
-    if(settled||hand||ch) saveBets(); else if(shCh){ renderAll(); syncSoon(); }
+    if(settled||hand||ch) saveBets(); else if(shCh){ renderAll(); syncSoon(); } else if(LIVE_CH) renderBets(); LIVE_CH=false;
     AUTO_NOTE=[settled?`🤖 settled <b>${settled}</b> bet${settled>1?'s':''} ${mid===settled?'mid-game — already decided, checked again at the final':`from ESPN's box scores${mid?` (${mid} mid-game — already decided, checked again at the final)`:''}`}`:'', fixed?`<span style="color:var(--warn)">${fixed} mid-game result${fixed>1?'s':''} changed at the final</span>`:'', seenN?`⏱ ${seenN} bet${seenN>1?'s':''} decided mid-game — settled once the next check agrees`:'', hand?`<span style="color:var(--warn)">${hand} to settle by hand (✋)</span>`:''].filter(Boolean).join(' · ')||(manual?'🤖 nothing decided yet':AUTO_NOTE);
     $('autoMsg').innerHTML=AUTO_NOTE;
   }finally{ autoBusy=false; }
