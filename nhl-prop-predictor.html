@@ -308,7 +308,7 @@
             <div><b>Closing prices</b> <span class="muted">— Close fills itself, so the bet log's CLV works</span><br>
               <label title="while the app is open in the 15 minutes before puck drop, Close is filled from your book's live price — 1 credit per bet type per game"><input type="checkbox" id="autoCloseChk"> ⚡ closing lines before puck drop <span class="muted">(1 credit per bet type, app open)</span></label><br>
               <label title="for games you didn't have the app open for: after puck drop, Close comes from The Odds API's price history (your book 5 min before the start) — 10 credits per bet type per game"><input type="checkbox" id="autoHistChk"> + after puck drop from history <span class="muted">(10 credits per bet type per game)</span></label> <span id="histCost" class="muted"></span></div>
-            <div><label title="BetMGM bets go on the card (real money, half stakes); every other book's would-be bets are logged to the background log and settled there — no money on them"><input type="checkbox" id="paperChk"> <b>🕶 Background only</b> <span class="muted">— track every bet the app would make, bet none — except BetMGM: real money at half stakes since the Nov 8 review (untick = every book real, full stakes)</span></label></div>
+            <div><label title="BetMGM bets go on the card (real money, full stakes since Nov 23); every other book's would-be bets are logged to the background log and settled there — no money on them"><input type="checkbox" id="paperChk"> <b>🕶 Background only</b> <span class="muted">— track every bet the app would make, bet none — except BetMGM: real money since the Nov 8 review (full stakes since Nov 23) (untick = every book real, full stakes)</span></label></div>
             <div><b>Filters</b> <span class="muted">— bets that lost on last season's real prices. They're hidden but still priced, and tracked in the background (Log → ⚙ More)</span><br>
               <label title="the edge is at FanDuel and none of your other books has that price: -58% on 16 bets last season, down in both halves"><input type="checkbox" class="filtchk" value="fdOnly"> Skip edges only FanDuel has <span class="muted">(-58% on 16 bets)</span></label> <label title="an edge of 10% or more is usually news (a scratch, a goalie change) the price already knows: 0 for 3 last season"><input type="checkbox" class="filtchk" value="ev10"> Skip 10%+ EV <span class="muted">(0 for 3)</span></label></div>
             <div>Never pull below <input id="oddsReserve" type="number" min="0" step="10" style="width:70px;font-size:12px"> credits <span class="muted">(kept for your other apps on this key)</span></div>
@@ -810,10 +810,13 @@ let CANDS=[], CARD=[], ROOM=null;
 // the background log as 'paper' and settles there. On by default; the switch is under odds settings
 let PAPER=lsJ('nhlp_paper', true)!==false, PAPERCARD=[];
 // 💵 REAL AT BETMGM (user, 2026-11-08: "its time to reassess the nhl sim" -> "yes"): background mode stays on for every book EXCEPT
-// these — their bets go on the card for real money at REAL_SCALE of the normal stake (half), under the bankroll limit. BetMGM passed
+// these — their bets go on the card for real money at REAL_SCALE of the normal stake (half until 2026-11-23, full since), under the bankroll limit. BetMGM passed
 // the review: 161 settled (real Oct 16-26 + background), 94-65-2, +14.7% flat, CLV +6.0%, beat the close 75%; Oct +15.5% / 91,
 // Nov 1-7 +13.6% / 70. DraftKings (-4.1% / 127, beat 58%) and FanDuel stay background. Full stakes at the Dec 1 review if November
 // holds. Only a pick whose BEST price is at a real book counts (the same-side de-dup is unchanged — that's the group that was tested).
+// 2026-11-23 (user: "max out my bankroll every week between NFL, NHL"): passed the Dec 1 test a week early — November BetMGM
+// (real + background) 177 settled, +6.4% flat, CLV +5.0%, beat the close 70%; Oct + Nov +$91 -> REAL_SCALE 1. DraftKings stays background
+// (Nov +7.5% / 69, CLV +5.6%, but Oct -9.6% / 102: Oct + Nov flat is still down).
 // ===== 📅 WEEKLY BUDGET (user, 2026-11-12: "theres so many bets and i always go over my bankroll. is there anyway we can get
 // all of the bets we see and stay under for the full week" -> "take into account avg amount of bets per week along with
 // potential bets with an edge that i miss"). KEEP THIS BLOCK IDENTICAL in nfl-td-predictor.template.html, alerts/watch.mjs and
@@ -825,7 +828,7 @@ let PAPER=lsJ('nhlp_paper', true)!==false, PAPERCARD=[];
 //  brake: what is left of this week's budget ($) over the full-size stakes still to come this week (F x the share of a week
 //         still ahead, WEEK_SHARE — measured on the user's own Oct 13 - Nov 9 log), so a busy week shrinks the later stakes;
 //  m    = min(base, brake). Weeks run Tuesday 00:00 - Monday 24:00 Eastern. Off before WEEK_FROM (m = 1).
-const WEEK_BUDGET=0.9, WEEK_FROM='2026-11-17', WEEK_SHARE=[[0,0],[24,.11],[48,.23],[72,.43],[96,.62],[120,.78],[132,.85],[144,.92],[156,.94],[168,1]];
+const WEEK_BUDGET=1, WEEK_FROM='2026-11-17', WEEK_SHARE=[[0,0],[24,.11],[48,.23],[72,.43],[96,.62],[120,.78],[132,.85],[144,.92],[156,.94],[168,1]];
 // 📝 TD bets are PAPER ONLY since 2026-11-16 (the TD rule lost on 2025 + 2026 real prices): NFL TD markets (anytime / first / last / two)
 // are left out of the forecast F — logged ones and the ones the alert bot found — so the budget sizes the bets that are still made
 const TD_PAPER=true, isTdMkt=m=>/^(anytime|first|last|two)$/.test(String(m||''));
@@ -857,7 +860,7 @@ function wpNote(){ let P; try{ P=curPlan(); }catch(e){ return ''; } const $=x=>e
   return `<div class="wpnote" title="your last ${P.n} week${P.n===1?'':'s'} of bets (logged + the ones the phone alerts found) came to about ${Math.round(P.F)}% of your bankroll at full size; every stake is cut to fit ${Math.round(WEEK_BUDGET*100)}% a week, and a busy week cuts the later stakes more">📅 This week: stakes at <b>${Math.round(P.m*100)}%</b> of full size so the week fits ${$(P.budget)} — ${$(P.spent)} used${P.m<P.base-0.005?' · a busy week, so later stakes are smaller':''}</div>`; }
 function budgetOut(){ try{ const P=curPlan(); return !!(P.on&&P.m<0.02); }catch(e){ return false; } }
 function noteWP(){ const body=$('cardBody'); if(!body) return; let el=$('wpNote'); if(!el){ el=document.createElement('div'); el.id='wpNote'; body.parentNode.insertBefore(el, body); } el.innerHTML=wpNote(); }
-const REAL_BOOKS=['betmgm'], REAL_SCALE=0.5, isRealBk=b=>REAL_BOOKS.includes(b), realBkNames=()=>REAL_BOOKS.map(bookName).join(' / ');
+const REAL_BOOKS=['betmgm'], REAL_SCALE=1, isRealBk=b=>REAL_BOOKS.includes(b), realBkNames=()=>REAL_BOOKS.map(bookName).join(' / ');
 // ⏱ OLD PRICES MAKE NO BETS (2026-11-11 audit, S1): a board stayed good until 6 hours after the start, so prices pulled at
 // 1 PM still made "bets" at 6:50 PM — after a scratch had moved every line. A game's prices now count only for BOARD_NEAR
 // (20 min) once the start is within 3 hours, BOARD_FAR (90 min) before that, measured from the last FULL pull (a closing-price
@@ -1026,12 +1029,12 @@ function byBook(L){ const m=new Map(); for(const c of L){ const b=c.book||'fandu
   const o=b=>{ const i=BOOK_ORDER.indexOf(b); return i<0?99:i; }; return [...m].sort((x,y)=>o(x[0])-o(y[0])); }
 function renderCard(){
   const body=$('cardBody'), any=Object.keys(BOARDS).some(g=>gameOf(g));
-  // background mode: bets at REAL_BOOKS use the normal card below (real money, half stakes); every other book's would-be bets
+  // background mode: bets at REAL_BOOKS use the normal card below (real money, full stakes); every other book's would-be bets
   // are tracked — a one-line note under the card, or the full banner when there's no real bet tonight
-  const bgN=PAPERCARD.length, bgNote=PAPER?`<div class="muted" style="font-size:13px;margin-top:10px">🕶 ${bgN?`${bgN} would-be bet${bgN===1?'':'s'} at your other books tracked in the background — no money on ${bgN===1?'it':'them'}. `:''}Only ${realBkNames()} is real money (half stakes) since the Nov 8 review. Details: Log → ⚙ More → 🕶 Background bets.</div>`:'';
+  const bgN=PAPERCARD.length, bgNote=PAPER?`<div class="muted" style="font-size:13px;margin-top:10px">🕶 ${bgN?`${bgN} would-be bet${bgN===1?'':'s'} at your other books tracked in the background — no money on ${bgN===1?'it':'them'}. `:''}Only ${realBkNames()} is real money since the Nov 8 review (full stakes since Nov 23). Details: Log → ⚙ More → 🕶 Background bets.</div>`:'';
   if(PAPER&&!CARD.length&&!(ROOM&&ROOM.out.length)){ const a=shadowAgg(SHADOW.filter(r=>(r.why||[]).includes('paper'))), done=a.w+a.l, pc=v=>(v>=0?'+':'')+(v*100).toFixed(1)+'%';
     body.innerHTML=(budgetOut()&&any ? cardStat('none','📅 WEEK’S BUDGET USED UP', `no new ${realBkNames()} bets until Tuesday — the week already holds its full budget`) : cardStat('done',`🕶 NO ${realBkNames().toUpperCase()} BETS TONIGHT`, any?`${bgN} would-be bet${bgN===1?'':'s'} at your other books tracked — nothing to bet`:'pull tonight\'s prices for the bets'))+
-      `<div class="muted" style="font-size:14px">Since the Nov 8 review only ${realBkNames()} bets are real money, at half stakes. At your other books the app logs every bet it would have made and settles them itself — no money on them.${done?` Background so far <b>${a.w}-${a.l}${a.p?'-'+a.p:''}</b> · ROI <b class="${a.roi>0?'ev-pos':a.roi<0?'ev-neg':''}">${pc(a.roi)}</b>${a.clv!=null?` · CLV ${pc(a.clv)}`:''}.`:''} Details: Log → ⚙ More → 🕶 Background bets.</div>`+skippedNote(); return; }
+      `<div class="muted" style="font-size:14px">Since the Nov 8 review only ${realBkNames()} bets are real money (full stakes since Nov 23). At your other books the app logs every bet it would have made and settles them itself — no money on them.${done?` Background so far <b>${a.w}-${a.l}${a.p?'-'+a.p:''}</b> · ROI <b class="${a.roi>0?'ev-pos':a.roi<0?'ev-neg':''}">${pc(a.roi)}</b>${a.clv!=null?` · CLV ${pc(a.clv)}`:''}.`:''} Details: Log → ⚙ More → 🕶 Background bets.</div>`+skippedNote(); return; }
   if(!CARD.length&&ROOM&&ROOM.out.length){ body.innerHTML=cardStat('done','💰 BANKROLL IN PLAY', `${ROOM.out.length} bet${ROOM.out.length>1?'s':''} wait${ROOM.out.length>1?'':'s'} for room`)+roomNote(ROOM)+skippedNote()+bgNote; return; }
   if(!CARD.length){ const open=bets.filter(b=>b.result==='pending'&&gameOf(b.game)).length;
     body.innerHTML=any?(open?cardStat('done','✅ NO NEW BETS',`you have ${open} open bet${open>1?'s':''} tonight — nothing new clears the bar`):cardStat('none','NO BETS TONIGHT','nothing clears the bar'))+'<div class="muted" style="font-size:14px">Nothing at your books beats what the other books say it\'s worth by enough — that\'s the normal case.</div>'
